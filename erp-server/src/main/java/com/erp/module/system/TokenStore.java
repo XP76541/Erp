@@ -17,6 +17,21 @@ public class TokenStore {
     public record LoginUser(Long userId, String username, String realName) {
     }
 
+    /** 线程存储当前登录用户 */
+    private static final ThreadLocal<LoginUser> currentUser = new ThreadLocal<>();
+
+    public static void setCurrentLoginUser(LoginUser user) {
+        currentUser.set(user);
+    }
+
+    public static LoginUser getCurrentLoginUser() {
+        return currentUser.get();
+    }
+
+    public static void clear() {
+        currentUser.remove();
+    }
+
     private final Map<String, LoginUser> store = new ConcurrentHashMap<>();
 
     public String create(LoginUser user) {

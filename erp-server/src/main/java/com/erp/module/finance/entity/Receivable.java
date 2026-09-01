@@ -21,21 +21,64 @@ public class Receivable {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private Long customerId;
-    private String docType;
-    private Long docId;
     private String docNo;
-    private LocalDate bizDate;
+
+    private Long orderId;
+
+    private String orderDocNo;
+
+    private Long customerId;
+
+    private String customerName;
+
+    private LocalDate businessDate;
+
     private LocalDate dueDate;
+
     private BigDecimal amount;
+
+    /** 已核销金额,收款核销时事务性累加 */
     private BigDecimal paidAmount;
+
     private BigDecimal remainingAmount;
-    private String status; // UNSETTLED/PARTIAL/SETTLED
+
+    /** UNSETTLED / PARTIAL / SETTLED */
+    private String status;
+
+    /** 逾期天数 */
     private Integer daysOverdue;
-    private String agingBucket; // 0-30/31-60/61-90/90+
-    private Long createdBy;
+
+    /** 账龄分类 */
+    private String agingBucket;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
+
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
+
+    /**
+     * 统计信息内部类
+     */
+    @Data
+    public static class ReceivableStatistics {
+        private Long customerId;
+        private BigDecimal totalAmount;
+        private BigDecimal totalPaid;
+        private BigDecimal totalRemaining;
+        private BigDecimal unsettledAmount;
+        private BigDecimal partialAmount;
+        private BigDecimal settledAmount;
+    }
+
+    /**
+     * 账龄分析内部类
+     */
+    @Data
+    public static class AgingAnalysis {
+        private String agingBucket;
+        private BigDecimal totalAmount;
+        private BigDecimal totalPaid;
+        private BigDecimal totalRemaining;
+    }
 }
