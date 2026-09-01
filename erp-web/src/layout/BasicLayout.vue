@@ -41,6 +41,14 @@
           <el-menu-item index="/purchase/inbounds">采购入库单</el-menu-item>
         </el-sub-menu>
 
+        <el-sub-menu index="finance">
+          <template #title>
+            <el-icon><Wallet /></el-icon>
+            <span>财务管理</span>
+          </template>
+          <el-menu-item index="/finance/payments">付款核销</el-menu-item>
+        </el-sub-menu>
+
         <el-sub-menu index="inventory" disabled>
           <template #title>
             <el-icon><Box /></el-icon>
@@ -92,6 +100,7 @@ import {
   ShoppingCart,
   SoldOut,
   UserFilled,
+  Wallet,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 
