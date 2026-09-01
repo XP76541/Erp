@@ -44,6 +44,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '客户档案' },
       },
       {
+        path: 'purchase/inbounds',
+        name: 'purchaseInbounds',
+        component: () => import('@/views/purchase/PurchaseInboundList.vue'),
+        meta: { title: '采购入库单' },
+      },
+      {
         path: 'masterdata/suppliers',
         name: 'suppliers',
         component: () => import('@/views/masterdata/SupplierList.vue'),

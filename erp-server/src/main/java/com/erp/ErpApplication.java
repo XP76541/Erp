@@ -9,7 +9,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 模块划分与表结构见 docs/database-design.md
  */
 @SpringBootApplication
-@MapperScan({"com.erp.module.system.mapper", "com.erp.module.masterdata.mapper"})
+@MapperScan({
+        "com.erp.module.system.mapper",
+        "com.erp.module.masterdata.mapper",
+        "com.erp.module.inventory.mapper",
+        "com.erp.module.purchase.mapper",
+        "com.erp.module.finance.mapper",
+})
 public class ErpApplication {
 
     public static void main(String[] args) {

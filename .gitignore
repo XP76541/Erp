@@ -22,3 +22,6 @@ Thumbs.db
 # Logs & temp
 logs/
 *.log
+
+# Local DB tools (contains credentials, never commit)
+erp-server/tools/

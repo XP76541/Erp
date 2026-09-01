@@ -33,11 +33,12 @@
           </template>
         </el-sub-menu>
 
-        <el-sub-menu index="purchase" disabled>
+        <el-sub-menu index="purchase">
           <template #title>
             <el-icon><ShoppingCart /></el-icon>
-            <span>采购管理(开发中)</span>
+            <span>采购管理</span>
           </template>
+          <el-menu-item index="/purchase/inbounds">采购入库单</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="inventory" disabled>
