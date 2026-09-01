@@ -25,6 +25,8 @@ import com.erp.module.sales.mapper.SalesOutboundItemMapper;
 import com.erp.module.sales.dto.SalesOutboundDtos;
 import com.erp.module.sales.dto.SalesOutboundDtos.CreateRequest;
 import com.erp.module.sales.dto.SalesOutboundDtos.ItemInput;
+import com.erp.module.finance.entity.Receivable;
+import com.erp.module.finance.mapper.ReceivableMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -208,16 +210,25 @@ public class SalesOutboundService {
         }
 
         // ③ 生成应收
+        Customer customer = customerMapper.selectById(outbound.getCustomerId());
+        if (customer == null) {
+            throw new BusinessException("客户信息不存在");
+        }
+
         Receivable receivable = new Receivable();
+        receivable.setDocNo(docSequenceService.nextDocNo("REC", "REC", LocalDate.now().format(PERIOD)));
+        receivable.setOrderId(outbound.getOrderId());
+        SalesOrder order = orderMapper.selectById(outbound.getOrderId());
+        receivable.setOrderDocNo(order != null ? order.getDocNo() : "");
         receivable.setCustomerId(outbound.getCustomerId());
-        receivable.setDocType("SALES_OUT");
-        receivable.setDocId(outbound.getId());
-        receivable.setDocNo(outbound.getDocNo());
-        receivable.setBizDate(outbound.getBizDate());
-        receivable.setDueDate(outbound.getBizDate().plusDays(customer.getPaymentTermDays()));
+        receivable.setCustomerName(customer.getName());
+        receivable.setBusinessDate(outbound.getBizDate());
+        receivable.setDueDate(outbound.getBizDate().plusDays(customer.getPaymentTermDays() != null ? customer.getPaymentTermDays() : 0));
         receivable.setAmount(outbound.getTotalAmount());
         receivable.setPaidAmount(BigDecimal.ZERO);
+        receivable.setRemainingAmount(outbound.getTotalAmount());
         receivable.setStatus("UNSETTLED");
+        receivable.setCreatedBy(user.userId());
         receivableMapper.insert(receivable);
 
         // ④ 更新订单发货状态

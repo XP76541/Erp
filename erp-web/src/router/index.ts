@@ -74,6 +74,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '销售出库单' },
       },
       {
+        path: 'finance/payments',
+        name: 'payments',
+        component: () => import('@/views/finance/PaymentList.vue'),
+        meta: { title: '收款核销' },
+      },
+      {
+        path: 'finance/aging-report',
+        name: 'agingReport',
+        component: () => import('@/views/finance/AgingReport.vue'),
+        meta: { title: '账龄分析' },
+      },
+      {
         path: 'finance/receivables',
         name: 'receivables',
         component: () => import('@/views/finance/ReceivableList.vue'),

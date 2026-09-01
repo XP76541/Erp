@@ -1,176 +1,197 @@
 package com.erp.module.finance.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.erp.module.finance.dto.PaymentDtos;
+import com.erp.common.PageResult;
+import com.erp.common.BusinessException;
 import com.erp.module.finance.entity.Payment;
 import com.erp.module.finance.entity.PaymentAllocation;
-import com.erp.module.finance.entity.Payable;
-import com.erp.module.finance.mapper.PaymentAllocationMapper;
+import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.mapper.PaymentMapper;
-import com.erp.module.finance.mapper.PayableMapper;
-import com.erp.module.masterdata.entity.Supplier;
+import com.erp.module.finance.mapper.PaymentAllocationMapper;
+import com.erp.module.finance.mapper.ReceivableMapper;
+import com.erp.module.system.entity.SysUser;
 import com.erp.module.system.service.DocSequenceService;
-import com.erp.module.system.service.OperationLogService;
-import com.erp.module.system.TokenStore;
-import jakarta.validation.constraints.NotNull;
+import com.erp.module.finance.dto.PaymentDtos;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class PaymentService {
-    private static final DateTimeFormatter PERIOD = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final PaymentMapper paymentMapper;
-    private final PaymentAllocationMapper allocationMapper;
-    private final PayableMapper payableMapper;
+    private final PaymentAllocationMapper paymentAllocationMapper;
+    private final ReceivableMapper receivableMapper;
     private final DocSequenceService docSequenceService;
-    private final OperationLogService operationLogService;
-    private final com.erp.module.masterdata.mapper.SupplierMapper supplierMapper;
+    private final ReceivableService receivableService;
 
-    public PaymentService(
-            PaymentMapper paymentMapper,
-            PaymentAllocationMapper allocationMapper,
-            PayableMapper payableMapper,
-            DocSequenceService docSequenceService,
-            OperationLogService operationLogService,
-            com.erp.module.masterdata.mapper.SupplierMapper supplierMapper) {
+    public PaymentService(PaymentMapper paymentMapper,
+                        PaymentAllocationMapper paymentAllocationMapper,
+                        ReceivableMapper receivableMapper,
+                        DocSequenceService docSequenceService,
+                        ReceivableService receivableService) {
         this.paymentMapper = paymentMapper;
-        this.allocationMapper = allocationMapper;
-        this.payableMapper = payableMapper;
+        this.paymentAllocationMapper = paymentAllocationMapper;
+        this.receivableMapper = receivableMapper;
         this.docSequenceService = docSequenceService;
-        this.operationLogService = operationLogService;
-        this.supplierMapper = supplierMapper;
+        this.receivableService = receivableService;
     }
 
-    public IPage<Payment> page(int pageNum, int pageSize, String keyword) {
-        QueryWrapper<Payment> qw = new QueryWrapper<>();
-        if (keyword != null && !keyword.isBlank()) {
-            qw.like("doc_no", keyword).or().like("remark", keyword);
+    @Transactional
+    public Payment createDraft(PaymentDtos.PaymentCreateRequest request, SysUser currentUser) {
+        // 验证收款金额
+        if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("收款金额必须大于0");
         }
-        qw.orderByDesc("id");
-        return paymentMapper.selectPage(new Page<>(pageNum, pageSize), qw);
+
+        // 创建收款单
+        Payment payment = new Payment();
+        payment.setDocNo(docSequenceService.generateDocNo("PAY"));
+        payment.setCustomerId(request.getCustomerId());
+        payment.setBusinessDate(request.getBusinessDate() != null ? request.getBusinessDate() : LocalDate.now());
+        payment.setAmount(request.getAmount());
+        payment.setAllocatedAmount(BigDecimal.ZERO);
+        payment.setStatus("DRAFT");
+        payment.setPaymentMethod(request.getPaymentMethod());
+        payment.setRemark(request.getRemark());
+
+        paymentMapper.insert(payment);
+
+        // 如果有核销明细，保存核销关系
+        if (request.getAllocations() != null && !request.getAllocations().isEmpty()) {
+            saveAllocations(payment.getId(), request.getAllocations());
+            updateAllocationAmount(payment.getId());
+        }
+
+        return payment;
     }
 
-    public PaymentDtos.DetailResponse detail(Long id) {
-        Payment doc = requireDoc(id);
-        QueryWrapper<PaymentAllocation> qw = new QueryWrapper<PaymentAllocation>().eq("payment_id", id);
-        List<PaymentAllocation> rows = allocationMapper.selectList(qw);
-        List<Long> payableIds = rows.stream().map(PaymentAllocation::getPayableId).toList();
-
-        Map<Long, Payable> payableMap = new HashMap<>();
-        if (!payableIds.isEmpty()) {
-            List<Payable> payables = payableMapper.selectBatchIds(payableIds);
-            for (Payable p : payables) {
-                payableMap.put(p.getId(), p);
-            }
+    @Transactional
+    public Payment audit(Long id, PaymentDtos.PaymentAuditRequest request, SysUser currentUser) {
+        // 抢占状态机:并发双击审核只有一次生效
+        Payment payment = paymentMapper.selectById(id);
+        if (payment == null) {
+            throw new BusinessException("收款单不存在");
+        }
+        if (!"DRAFT".equals(payment.getStatus())) {
+            throw new BusinessException("收款单不是草稿状态,无法审核");
         }
 
-        List<PaymentDtos.AllocationItem> items = new ArrayList<>();
-        for (PaymentAllocation r : rows) {
-            Payable p = payableMap.get(r.getPayableId());
-            BigDecimal outstanding = p != null ? p.getAmount().subtract(p.getPaidAmount()) : BigDecimal.ZERO;
-            items.add(new PaymentDtos.AllocationItem(r.getId(), r.getPaymentId(), r.getPayableId(), r.getAmount(),
-                    p != null ? p.getDocNo() : "—", outstanding));
-        }
-
-        return new PaymentDtos.DetailResponse(doc, items);
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public Long create(PaymentDtos.CreateRequest req, TokenStore.LoginUser user) {
-        // 校验供应商存在且启用
-        var supplier = supplierMapper.selectById(req.supplierId());
-        if (supplier == null || supplier.getIsActive() == 0) {
-            throw new IllegalArgumentException("供应商不存在或已停用");
-        }
-
-        // 核销金额总和校验
-        BigDecimal totalAlloc = BigDecimal.ZERO;
-        for (var alloc : req.allocations()) {
-            totalAlloc = totalAlloc.add(alloc.amount());
-        }
-        if (totalAlloc.compareTo(req.amount()) != 0) {
-            throw new IllegalArgumentException("核销明细总额(" + totalAlloc + ")与付款金额(" + req.amount() + ")不一致");
-        }
-
-        // 单号
-        String docNo = docSequenceService.nextDocNo("PAY", "PAY", req.bizDate().format(PERIOD));
-
-        // 插入付款单
-        Payment doc = new Payment();
-        doc.setDocNo(docNo);
-        doc.setSupplierId(req.supplierId());
-        doc.setBizDate(req.bizDate());
-        doc.setAmount(req.amount());
-        doc.setMethod(req.method());
-        doc.setBankAccount(req.bankAccount() != null ? req.bankAccount() : "");
-        doc.setStatus("DRAFT");
-        doc.setCreatedBy(user.userId());
-        paymentMapper.insert(doc);
-
-        // 插入核销明细
-        for (int i = 0; i < req.allocations().size(); i++) {
-            var alloc = req.allocations().get(i);
-            PaymentAllocation row = new PaymentAllocation();
-            row.setPaymentId(doc.getId());
-            row.setPayableId(alloc.payableId());
-            row.setAmount(alloc.amount());
-            allocationMapper.insert(row);
-        }
-
-        return doc.getId();
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public void audit(Long id, TokenStore.LoginUser user, String ip) {
-        Payment doc = requireDoc(id);
-        int updated = paymentMapper.claimAudit(id, user.userId());
+        // 原子抢占审核
+        int updated = paymentMapper.updateStatus(id, "DRAFT");
         if (updated == 0) {
-            throw new IllegalStateException("单据不存在或不是草稿状态，无法审核");
+            throw new BusinessException("收款单已被他人审核");
         }
 
-        // 获取核销明细
-        QueryWrapper<PaymentAllocation> qw = new QueryWrapper<PaymentAllocation>().eq("payment_id", id);
-        List<PaymentAllocation> rows = allocationMapper.selectList(qw);
-
-        // 逐行核销应付
-        for (PaymentAllocation r : rows) {
-            Payable p = payableMapper.selectForUpdate(r.getPayableId());
-            if (p == null) {
-                throw new IllegalArgumentException("应付单不存在(ID=" + r.getPayableId() + ")");
-            }
-            BigDecimal newPaid = p.getPaidAmount().add(r.getAmount());
-            if (newPaid.compareTo(p.getAmount()) > 0) {
-                throw new IllegalArgumentException("核销金额(" + r.getAmount() + ")超过应付单 " + p.getDocNo() + " 的未核销余额");
-            }
-            p.setPaidAmount(newPaid);
-            if (newPaid.compareTo(p.getAmount()) == 0) {
-                p.setStatus("SETTLED");
-            } else if (p.getPaidAmount().compareTo(BigDecimal.ZERO) == 0) {
-                p.setStatus("PARTIAL");
-            }
-            payableMapper.updateById(p);
-        }
+        // 更新审核字段
+        payment.setStatus("AUDITED");
+        payment.setUpdatedAt(LocalDate.now().atStartOfDay());
+        paymentMapper.updateById(payment);
 
         // 记录操作日志
-        operationLogService.record(user, "payment", "AUDIT", "PAYMENT", doc.getId(), doc.getDocNo(),
-                "付款核销，金额=" + doc.getAmount(), ip);
+        // operationLogService.log("AUDIT_PAYMENT", currentUser.getId(), "审核收款单: " + payment.getDocNo(), id);
+
+        return payment;
     }
 
-    private Payment requireDoc(@NotNull Long id) {
-        Payment doc = paymentMapper.selectById(id);
-        if (doc == null) {
-            throw new IllegalArgumentException("付款单不存在");
+    public PageResult<PaymentDtos.PaymentListResponse> getPayments(PaymentDtos.PaymentListRequest params) {
+        QueryWrapper<Payment> wrapper = new QueryWrapper<>();
+        if (params.getCustomerId() != null) {
+            wrapper.eq("customer_id", params.getCustomerId());
         }
-        return doc;
+        if (params.getStatus() != null) {
+            wrapper.eq("status", params.getStatus());
+        }
+        if (params.getStartDate() != null) {
+            wrapper.ge("business_date", params.getStartDate());
+        }
+        if (params.getEndDate() != null) {
+            wrapper.le("business_date", params.getEndDate());
+        }
+        wrapper.orderByDesc("created_at");
+
+        List<Payment> payments = paymentMapper.selectList(wrapper);
+        List<PaymentDtos.PaymentListResponse> responses = payments.stream()
+                .map(this::convertToListResponse)
+                .collect(Collectors.toList());
+
+        return new PageResult<>(responses, payments.size());
+    }
+
+    public List<PaymentDtos.ReceivableListResponse> getReceivablesByCustomer(Long customerId) {
+        List<Receivable> receivables = receivableMapper.getUnsettledByCustomerId(customerId);
+        return receivables.stream()
+                .map(this::convertToReceivableResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    private void saveAllocations(Long paymentId, List<PaymentDtos.CreateRequest.AllocationItem> allocations) {
+        for (PaymentDtos.CreateRequest.AllocationItem allocation : allocations) {
+            // 检查核销金额
+            Receivable receivable = receivableMapper.selectById(allocation.getReceivableId());
+            if (receivable == null) {
+                throw new BusinessException("应收账款不存在: " + allocation.getReceivableId());
+            }
+            if (allocation.getAllocatedAmount().compareTo(receivable.getRemainingAmount()) > 0) {
+                throw new BusinessException("核销金额不能超过应收余额: " + receivable.getDocNo());
+            }
+
+            // 创建核销记录
+            PaymentAllocation paymentAllocation = new PaymentAllocation();
+            paymentAllocation.setPaymentId(paymentId);
+            paymentAllocation.setReceivableId(allocation.getReceivableId());
+            paymentAllocation.setAllocatedAmount(allocation.getAllocatedAmount());
+            paymentAllocationMapper.insert(paymentAllocation);
+
+            // 更新应收账款
+            receivableMapper.updatePaidAmount(allocation.getReceivableId(), allocation.getAllocatedAmount());
+        }
+    }
+
+    @Transactional
+    private void updateAllocationAmount(Long paymentId) {
+        BigDecimal allocatedAmount = paymentAllocationMapper.getAllocatedAmount(paymentId);
+        Payment payment = paymentMapper.selectById(paymentId);
+        payment.setAllocatedAmount(allocatedAmount);
+        paymentMapper.updateById(payment);
+    }
+
+    private PaymentDtos.PaymentListResponse convertToListResponse(Payment payment) {
+        PaymentDtos.PaymentListResponse response = new PaymentDtos.PaymentListResponse();
+        response.setId(payment.getId());
+        response.setDocNo(payment.getDocNo());
+        response.setCustomerId(payment.getCustomerId());
+        response.setCustomerName(payment.getCustomerName());
+        response.setBusinessDate(payment.getBusinessDate());
+        response.setAmount(payment.getAmount());
+        response.setAllocatedAmount(payment.getAllocatedAmount());
+        response.setStatus(payment.getStatus());
+        response.setPaymentMethod(payment.getPaymentMethod());
+        response.setCreatedAt(payment.getCreatedAt().toString());
+        return response;
+    }
+
+    private PaymentDtos.ReceivableListResponse convertToReceivableResponse(Receivable receivable) {
+        PaymentDtos.ReceivableListResponse response = new PaymentDtos.ReceivableListResponse();
+        response.setId(receivable.getId());
+        response.setDocNo(receivable.getDocNo());
+        response.setOrderDocNo(receivable.getOrderDocNo());
+        response.setCustomerId(receivable.getCustomerId());
+        response.setCustomerName(receivable.getCustomerName());
+        response.setBusinessDate(receivable.getBusinessDate());
+        response.setDueDate(receivable.getDueDate());
+        response.setAmount(receivable.getAmount());
+        response.setPaidAmount(receivable.getPaidAmount());
+        response.setRemainingAmount(receivable.getRemainingAmount());
+        response.setStatus(receivable.getStatus());
+        response.setDaysOverdue(receivable.getDaysOverdue());
+        response.setAgingBucket(receivable.getAgingBucket());
+        response.setCreatedAt(receivable.getCreatedAt().toString());
+        return response;
     }
 }
