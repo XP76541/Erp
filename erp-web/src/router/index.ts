@@ -25,6 +25,30 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/masterdata/ProductList.vue'),
         meta: { title: '商品档案' },
       },
+      {
+        path: 'masterdata/categories',
+        name: 'categories',
+        component: () => import('@/views/masterdata/CategoryList.vue'),
+        meta: { title: '商品分类' },
+      },
+      {
+        path: 'masterdata/warehouses',
+        name: 'warehouses',
+        component: () => import('@/views/masterdata/WarehouseList.vue'),
+        meta: { title: '仓库档案' },
+      },
+      {
+        path: 'masterdata/customers',
+        name: 'customers',
+        component: () => import('@/views/masterdata/CustomerList.vue'),
+        meta: { title: '客户档案' },
+      },
+      {
+        path: 'masterdata/suppliers',
+        name: 'suppliers',
+        component: () => import('@/views/masterdata/SupplierList.vue'),
+        meta: { title: '供应商档案' },
+      },
     ],
   },
 ]

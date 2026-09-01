@@ -20,8 +20,10 @@
             <span>基础数据</span>
           </template>
           <el-menu-item index="/masterdata/products">商品档案</el-menu-item>
-          <el-menu-item index="/masterdata/customers" disabled>客户档案(开发中)</el-menu-item>
-          <el-menu-item index="/masterdata/suppliers" disabled>供应商档案(开发中)</el-menu-item>
+          <el-menu-item index="/masterdata/categories">商品分类</el-menu-item>
+          <el-menu-item index="/masterdata/warehouses">仓库档案</el-menu-item>
+          <el-menu-item index="/masterdata/customers">客户档案</el-menu-item>
+          <el-menu-item index="/masterdata/suppliers">供应商档案</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="sales" disabled>

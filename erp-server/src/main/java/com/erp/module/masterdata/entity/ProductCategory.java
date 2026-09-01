@@ -11,24 +11,27 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 商品分类;两级结构(parentId=0 为根),档案只停用不删除
+ */
 @Data
-@TableName("warehouse")
-public class Warehouse {
+@TableName("product_category")
+public class ProductCategory {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    @NotBlank(message = "仓库编码不能为空")
-    @Size(max = 30, message = "仓库编码不能超过 30 字")
-    private String code;
+    /** 上级分类,0 = 根分类 */
+    private Long parentId;
 
-    @NotBlank(message = "仓库名称不能为空")
-    @Size(max = 50, message = "仓库名称不能超过 50 字")
+    @NotBlank(message = "分类名称不能为空")
+    @Size(max = 50, message = "分类名称不能超过 50 字")
     private String name;
 
-    /** 正品仓 / 次品仓 / 样品仓 */
-    private String type;
+    /** 排序号,小的在前 */
+    private Integer sort;
 
+    /** 1 启用 0 停用 */
     private Integer isActive;
 
     @TableField(fill = FieldFill.INSERT)
