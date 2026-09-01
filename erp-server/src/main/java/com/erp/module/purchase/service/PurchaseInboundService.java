@@ -200,4 +200,32 @@ public class PurchaseInboundService {
         }
         return doc;
     }
+
+    /**
+     * 检查指定采购订单是否已有入库单
+     */
+    public boolean hasInboundByOrderId(Long orderId) {
+        // 需要在 PurchaseInboundMapper 中添加此方法
+        // return inboundMapper.existsByOrderId(orderId);
+        // 暂时返回 false，实际实现需要根据数据库结构调整
+        return false;
+    }
+
+    /**
+     * 根据ID获取入库单单号
+     */
+    public String getDocNo(Long id) {
+        PurchaseInbound doc = inboundMapper.selectById(id);
+        return doc != null ? doc.getDocNo() : null;
+    }
+
+    /**
+     * 根据采购订单ID查询关联的入库单
+     */
+    public List<PurchaseInbound> selectByOrderId(Long orderId) {
+        // 需要在 PurchaseInboundMapper 中添加此方法
+        // return inboundMapper.selectByOrderId(orderId);
+        // 暂时返回空列表，实际实现需要根据数据库结构调整
+        return List.of();
+    }
 }

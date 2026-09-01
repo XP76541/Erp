@@ -1,6 +1,7 @@
 package com.erp.module.finance.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.erp.common.PageResult;
 import com.erp.common.BusinessException;
 import com.erp.module.finance.entity.Payment;
@@ -11,16 +12,21 @@ import com.erp.module.finance.mapper.PaymentAllocationMapper;
 import com.erp.module.finance.mapper.ReceivableMapper;
 import com.erp.module.system.entity.SysUser;
 import com.erp.module.system.service.DocSequenceService;
+import com.erp.module.system.service.OperationLogService;
+import com.erp.module.system.TokenStore;
 import com.erp.module.finance.dto.PaymentDtos;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class PaymentService {
 
     private final PaymentMapper paymentMapper;
@@ -28,21 +34,10 @@ public class PaymentService {
     private final ReceivableMapper receivableMapper;
     private final DocSequenceService docSequenceService;
     private final ReceivableService receivableService;
-
-    public PaymentService(PaymentMapper paymentMapper,
-                        PaymentAllocationMapper paymentAllocationMapper,
-                        ReceivableMapper receivableMapper,
-                        DocSequenceService docSequenceService,
-                        ReceivableService receivableService) {
-        this.paymentMapper = paymentMapper;
-        this.paymentAllocationMapper = paymentAllocationMapper;
-        this.receivableMapper = receivableMapper;
-        this.docSequenceService = docSequenceService;
-        this.receivableService = receivableService;
-    }
+    private final OperationLogService operationLogService;
 
     @Transactional
-    public Payment createDraft(PaymentDtos.PaymentCreateRequest request, SysUser currentUser) {
+    public Payment createDraft(PaymentDtos.PaymentCreateRequest request, TokenStore.LoginUser user) {
         // 验证收款金额
         if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("收款金额必须大于0");
@@ -50,7 +45,7 @@ public class PaymentService {
 
         // 创建收款单
         Payment payment = new Payment();
-        payment.setDocNo(docSequenceService.generateDocNo("PAY"));
+        payment.setDocNo(docSequenceService.nextDocNo("PAY", "PAY", LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"))));
         payment.setCustomerId(request.getCustomerId());
         payment.setBusinessDate(request.getBusinessDate() != null ? request.getBusinessDate() : LocalDate.now());
         payment.setAmount(request.getAmount());
@@ -71,7 +66,7 @@ public class PaymentService {
     }
 
     @Transactional
-    public Payment audit(Long id, PaymentDtos.PaymentAuditRequest request, SysUser currentUser) {
+    public Payment audit(Long id, TokenStore.LoginUser user, String ip) {
         // 抢占状态机:并发双击审核只有一次生效
         Payment payment = paymentMapper.selectById(id);
         if (payment == null) {
@@ -82,18 +77,20 @@ public class PaymentService {
         }
 
         // 原子抢占审核
-        int updated = paymentMapper.updateStatus(id, "DRAFT");
+        int updated = paymentMapper.updateStatus(id, "AUDITED");
         if (updated == 0) {
             throw new BusinessException("收款单已被他人审核");
         }
 
         // 更新审核字段
         payment.setStatus("AUDITED");
-        payment.setUpdatedAt(LocalDate.now().atStartOfDay());
+        payment.setUpdatedAt(LocalDateTime.now());
         paymentMapper.updateById(payment);
 
         // 记录操作日志
-        // operationLogService.log("AUDIT_PAYMENT", currentUser.getId(), "审核收款单: " + payment.getDocNo(), id);
+        String detail = "{\"amount\":" + payment.getAmount() + ",\"allocated\":" + payment.getAllocatedAmount() + "}";
+        operationLogService.record(user, "payment", "AUDIT",
+                "PAY", id, payment.getDocNo(), detail, ip);
 
         return payment;
     }

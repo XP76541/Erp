@@ -1,5 +1,6 @@
 package com.erp.module.inventory.service;
 
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.erp.module.inventory.entity.Inventory;
 import com.erp.module.inventory.entity.InventoryLedger;
 import com.erp.module.inventory.mapper.InventoryLedgerMapper;
@@ -7,10 +8,14 @@ import com.erp.module.inventory.mapper.InventoryMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 库存核心:数量与成本的一切变动只能经过本服务(已审核单据调用)
@@ -69,6 +74,62 @@ public class InventoryService {
         ledger.balanceQty = newQty;
         ledger.balanceAmount = newAmount;
         writeLedger(docType, docId, docNo, productId, warehouseId, ledger, bizDate);
+    }
+
+    /**
+     * 查询指定商品在指定仓库的库存
+     */
+    public BigDecimal getStockQuantity(Long productId, Long warehouseId) {
+        Inventory inventory = inventoryMapper.selectOne(
+                Wrappers.<Inventory>lambdaQuery()
+                        .eq(Inventory::getProductId, productId)
+                        .eq(Inventory::getWarehouseId, warehouseId));
+
+        return inventory != null ? inventory.getQty() : BigDecimal.ZERO;
+    }
+
+    /**
+     * 查询指定仓库的所有商品库存
+     */
+    public Map<Long, BigDecimal> getWarehouseStocks(Long warehouseId) {
+        List<Inventory> inventories = inventoryMapper.selectList(
+                Wrappers.<Inventory>lambdaQuery()
+                        .eq(Inventory::getWarehouseId, warehouseId));
+
+        return inventories.stream()
+                .collect(Collectors.toMap(
+                        Inventory::getProductId,
+                        Inventory::getQty
+                ));
+    }
+
+    /**
+     * 查询指定商品的单位成本
+     */
+    public BigDecimal getUnitCost(Long productId, Long warehouseId) {
+        Inventory inventory = inventoryMapper.selectOne(
+                Wrappers.<Inventory>lambdaQuery()
+                        .eq(Inventory::getProductId, productId)
+                        .eq(Inventory::getWarehouseId, warehouseId));
+
+        if (inventory == null || inventory.getQty().compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+
+        return inventory.getTotalCost().divide(inventory.getQty(), 4, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 查询指定仓库的库存总价值
+     */
+    public BigDecimal getWarehouseTotalValue(Long warehouseId) {
+        List<Inventory> inventories = inventoryMapper.selectList(
+                Wrappers.<Inventory>lambdaQuery()
+                        .eq(Inventory::getWarehouseId, warehouseId));
+
+        return inventories.stream()
+                .map(inv -> inv.getTotalCost())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /** 出库(销售出库/退货出库/调拨出/盘亏等):按当前加权平均结转成本;库存不足整体失败 */

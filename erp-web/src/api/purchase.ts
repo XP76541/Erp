@@ -1,46 +1,185 @@
-import http from './http'
-import type { PageResult } from './http'
+import { http } from './http';
 
-export interface PurchaseInboundItem {
-  id?: number
-  lineNo?: number
-  productId: number
-  warehouseId?: number
-  qty: number
-  price: number
-  amount?: number
-  note?: string
+// 采购订单相关接口
+export interface PurchaseOrderItemInput {
+  productId: number;
+  qty: number;
+  price: number;
+  note?: string;
 }
 
-export interface PurchaseInbound {
-  id?: number
-  docNo?: string
-  supplierId: number
-  warehouseId: number
-  bizDate?: string
-  status?: string
-  auditBy?: number
-  auditAt?: string
-  remark?: string
-  createdAt?: string
+export interface PurchaseOrderCreateRequest {
+  supplierId: number;
+  warehouseId: number;
+  bizDate?: string;
+  items: PurchaseOrderItemInput[];
+  remark?: string;
 }
 
-export interface PurchaseInboundDetail {
-  doc: PurchaseInbound
-  items: PurchaseInboundItem[]
+export interface PurchaseOrderUpdateQtyRequest {
+  items: Array<{
+    itemId: number;
+    qty: number;
+  }>;
 }
 
-export const purchaseApi = {
-  page(params: { page: number; size: number; keyword?: string; status?: string }) {
-    return http.get<unknown, PageResult<PurchaseInbound>>('/purchase-inbounds', { params })
-  },
-  detail(id: number) {
-    return http.get<unknown, PurchaseInboundDetail>(`/purchase-inbounds/${id}`)
-  },
-  create(data: { supplierId: number; warehouseId: number; bizDate?: string; remark?: string; items: PurchaseInboundItem[] }) {
-    return http.post<unknown, number>('/purchase-inbounds', data)
-  },
-  audit(id: number) {
-    return http.put(`/purchase-inbounds/${id}/audit`)
-  },
+export interface PurchaseOrderAuditRequest {
+  remark?: string;
+  ip: string;
+}
+
+export interface PurchaseOrderRejectRequest {
+  remark?: string;
+  ip: string;
+}
+
+export interface PurchaseOrderListResponse {
+  id: number;
+  docNo: string;
+  supplierId: number;
+  supplierName: string;
+  warehouseId: number;
+  warehouseName: string;
+  bizDate: string;
+  status: string;
+  totalAmount: number;
+  remark?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PurchaseOrderDetailResponse {
+  order: {
+    id: number;
+    docNo: string;
+    supplierId: number;
+    supplierName: string;
+    warehouseId: number;
+    warehouseName: string;
+    bizDate: string;
+    status: string;
+    totalAmount: number;
+    remark?: string;
+    createdBy?: number;
+    createdByName?: string;
+    auditBy?: number;
+    auditByName?: string;
+    auditAt?: string;
+    rejectBy?: number;
+    rejectByName?: string;
+    rejectAt?: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+  items: Array<{
+    id: number;
+    orderId: number;
+    lineNo: number;
+    productId: number;
+    qty: number;
+    price: number;
+    amount: number;
+    note?: string;
+    receivedQty: number;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+}
+
+// 采购订单状态枚举
+export const PurchaseOrderStatus = {
+  DRAFT: 'DRAFT',
+  AUDITED: 'AUDITED',
+  VOID: 'VOID'
+} as const;
+
+export type PurchaseOrderStatusType = typeof PurchaseOrderStatus[keyof typeof PurchaseOrderStatus];
+
+// 采购订单API
+export const purchaseOrderApi = {
+  // 分页查询
+  list: (params: {
+    keyword?: string;
+    status?: string;
+    supplierId?: number;
+    page?: number;
+    size?: number;
+  }) => http.get<PageResult<PurchaseOrderListResponse>>('/purchase/orders', { params }),
+
+  // 获取详情
+  detail: (id: number) =>
+    http.get<PurchaseOrderDetailResponse>(`/purchase/orders/${id}`),
+
+  // 创建
+  create: (data: PurchaseOrderCreateRequest) =>
+    http.post<number>('/purchase/orders', data),
+
+  // 更新
+  update: (id: number, data: PurchaseOrderCreateRequest) =>
+    http.put<void>(`/purchase/orders/${id}`, data),
+
+  // 审核
+  audit: (id: number, data: PurchaseOrderAuditRequest) =>
+    http.put<void>(`/purchase/orders/${id}/audit`, data),
+
+  // 驳回
+  reject: (id: number, data: PurchaseOrderRejectRequest) =>
+    http.put<void>(`/purchase/orders/${id}/reject`, data),
+
+  // 更新数量（仅限草稿状态）
+  updateQty: (id: number, data: PurchaseOrderUpdateQtyRequest) =>
+    http.put<void>(`/purchase/orders/${id}/qty`, data),
+
+  // 获取供应商的采购订单
+  getBySupplier: (supplierId: number) =>
+    http.get<PurchaseOrderListResponse[]>(`/purchase/orders/supplier/${supplierId}`),
+
+  // 统计
+  getDraftCount: () =>
+    http.get<number>('/purchase/orders/stats/draft-count'),
+
+  getUnreceivedCount: () =>
+    http.get<number>('/purchase/orders/stats/unreceived-count'),
+
+  // 获取采购订单明细的入库情况
+  getItemStats: (orderId: number) =>
+    http.get<Array<{
+      id: number;
+      lineNo: number;
+      orderedQty: number;
+      receivedQty: number;
+      remainingQty: number;
+      productId: number;
+      productName: string;
+    }>>(`/purchase/orders/${orderId}/item-stats`),
+
+  // 批量更新已入库数量
+  updateReceivedQty: (orderId: number, items: Array<{ itemId: number; qty: number }>) =>
+    http.put<void>(`/purchase/orders/${orderId}/received-qty`, { items }),
+};
+
+// 采购入库单API（已存在）
+export const purchaseInboundApi = {
+  list: (params: {
+    keyword?: string;
+    status?: string;
+    supplierId?: number;
+    page?: number;
+    size?: number;
+  }) => http.get<PageResult<any>>('/purchase/inbounds', { params }),
+
+  create: (data: any) =>
+    http.post<number>('/purchase/inbounds', data),
+
+  audit: (id: number, data: any) =>
+    http.put<void>(`/purchase/inbounds/${id}/audit`, data),
+};
+
+// 通用响应类型
+interface PageResult<T> {
+  records: T[];
+  total: number;
+  size: number;
+  current: number;
+  pages: number;
 }

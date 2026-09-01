@@ -50,6 +50,7 @@ public class PaymentListResponse {
 public class PaymentAuditRequest {
     private String action; // audit or reject
     private String remark;
+    private String ip;
 }
 
 @Data

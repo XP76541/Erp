@@ -2,12 +2,14 @@ package com.erp.module.finance.controller;
 
 import com.erp.common.Result;
 import com.erp.common.PageResult;
-import com.erp.module.system.entity.SysUser;
 import com.erp.module.system.TokenStore;
 import com.erp.module.finance.service.PaymentService;
 import com.erp.module.finance.dto.PaymentDtos;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import jakarta.servlet.http.HttpServletRequest;
 import javax.annotation.Resource;
 import java.util.List;
 
@@ -20,15 +22,17 @@ public class PaymentController {
 
     @PostMapping
     public Result<Long> create(@RequestBody PaymentDtos.PaymentCreateRequest request) {
-        SysUser currentUser = TokenStore.getCurrentLoginUser();
+        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
         Payment payment = paymentService.createDraft(request, currentUser);
         return Result.success(payment.getId());
     }
 
     @PutMapping("/{id}/audit")
     public Result<Void> audit(@PathVariable Long id, @RequestBody PaymentDtos.PaymentAuditRequest request) {
-        SysUser currentUser = TokenStore.getCurrentLoginUser();
-        paymentService.audit(id, request, currentUser);
+        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+        HttpServletRequest req = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+        String ip = req.getRemoteAddr();
+        paymentService.audit(id, currentUser, ip);
         return Result.success();
     }
 

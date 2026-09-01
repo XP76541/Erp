@@ -1,24 +1,25 @@
 package com.erp.module.finance.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.erp.common.PageResult;
 import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.mapper.ReceivableMapper;
 import com.erp.module.finance.dto.ReceivableDtos;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class ReceivableService {
 
     private final ReceivableMapper receivableMapper;
-
-    public ReceivableService(ReceivableMapper receivableMapper) {
-        this.receivableMapper = receivableMapper;
-    }
 
     public PageResult<ReceivableDtos.ReceivableListResponse> getReceivables(ReceivableDtos.ReceivableListRequest params) {
         QueryWrapper<Receivable> wrapper = new QueryWrapper<>();
@@ -96,8 +97,29 @@ public class ReceivableService {
         response.setPaidAmount(receivable.getPaidAmount());
         response.setRemainingAmount(receivable.getRemainingAmount());
         response.setStatus(receivable.getStatus());
-        response.setDaysOverdue(receivable.getDaysOverdue());
-        response.setAgingBucket(receivable.getAgingBucket());
+
+        // 计算逾期天数
+        if (receivable.getDueDate() != null) {
+            long daysOverdue = ChronoUnit.DAYS.between(receivable.getDueDate(), LocalDate.now());
+            response.setDaysOverdue(daysOverdue > 0 ? (int) daysOverdue : 0);
+
+            // 设置账龄分类
+            if (daysOverdue < 0) {
+                response.setAgingBucket("未到期");
+            } else if (daysOverdue <= 30) {
+                response.setAgingBucket("1-30天");
+            } else if (daysOverdue <= 60) {
+                response.setAgingBucket("31-60天");
+            } else if (daysOverdue <= 90) {
+                response.setAgingBucket("61-90天");
+            } else {
+                response.setAgingBucket("90天以上");
+            }
+        } else {
+            response.setDaysOverdue(0);
+            response.setAgingBucket("未确定");
+        }
+
         response.setCreatedAt(receivable.getCreatedAt().toString());
         return response;
     }
