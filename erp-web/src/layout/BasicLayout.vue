@@ -39,6 +39,7 @@
             <span>采购管理</span>
           </template>
           <el-menu-item index="/purchase/inbounds">采购入库单</el-menu-item>
+          <el-menu-item index="/purchase/returns">采购退货单</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="finance">

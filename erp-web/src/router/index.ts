@@ -50,6 +50,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '采购入库单' },
       },
       {
+        path: 'purchase/returns',
+        name: 'purchaseReturns',
+        component: () => import('@/views/purchase/PurchaseReturnList.vue'),
+        meta: { title: '采购退货单' },
+      },
+      {
         path: 'finance/payments',
         name: 'payments',
         component: () => import('@/views/finance/PaymentList.vue'),

@@ -23,6 +23,7 @@ public class PurchaseReturn {
     private Long auditBy;
     private LocalDateTime auditAt;
     private Long createdBy;
+    @TableField(exist = false) private java.math.BigDecimal totalAmount;
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updatedAt;
 }

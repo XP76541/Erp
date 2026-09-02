@@ -1,5 +1,7 @@
 package com.erp.module.purchase.dto;
 
+import com.erp.module.purchase.entity.PurchaseReturn;
+import com.erp.module.purchase.entity.PurchaseReturnItem;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
@@ -25,5 +27,23 @@ public class PurchaseReturnDtos {
         @NotNull(message = "原入库明细不能为空") private Long inboundItemId;
         @NotNull(message = "退货数量不能为空") @DecimalMin(value = "0.0001", message = "退货数量必须大于0") private BigDecimal qty;
         private String note;
+    }
+
+    @Data
+    public static class ListResponse {
+        private Long id;
+        private String docNo;
+        private Long supplierId;
+        private Long warehouseId;
+        private LocalDate bizDate;
+        private String status;
+        private String reason;
+        private BigDecimal totalAmount;
+        private Long auditBy;
+        private java.time.LocalDateTime auditAt;
+        private java.time.LocalDateTime createdAt;
+    }
+
+    public record DetailResponse(PurchaseReturn doc, List<PurchaseReturnItem> items) {
     }
 }
