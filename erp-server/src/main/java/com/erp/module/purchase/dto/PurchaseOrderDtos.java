@@ -74,12 +74,8 @@ public class PurchaseOrderDtos {
         private LocalDateTime updatedAt;
     }
 
-    /** 详情响应 */
-    @Data
-    public static class DetailResponse {
-
-        private PurchaseOrder order;
-        private List<PurchaseOrderItem> items;
+    /** 详情响应:主表 + 明细 */
+    public record DetailResponse(PurchaseOrder order, List<PurchaseOrderItem> items) {
     }
 
     /** 创建从采购订单响应 */
