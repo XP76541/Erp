@@ -6,8 +6,6 @@ import com.erp.module.sales.dto.SalesOrderDtos;
 import com.erp.module.sales.dto.SalesOrderDtos.CreateRequest;
 import com.erp.module.sales.dto.SalesOrderDtos.AuditRequest;
 import com.erp.module.sales.dto.SalesOutboundDtos;
-import com.erp.module.sales.dto.SalesOutboundDtos.CreateRequest as OutboundCreateRequest;
-import com.erp.module.sales.entity.SalesOrder;
 import com.erp.module.sales.service.SalesOrderService;
 import com.erp.module.sales.service.SalesOutboundService;
 import com.erp.module.system.AuthInterceptor;
@@ -110,7 +108,7 @@ public class SalesController {
     @PostMapping("/outbounds/from-order")
     public Result<SalesOutboundDtos.CreateFromOrderResponse> createOutboundFromOrder(
             @RequestParam Long orderId,
-            @Valid @RequestBody OutboundCreateRequest request,
+            @Valid @RequestBody SalesOutboundDtos.CreateRequest request,
             HttpServletRequest httpRequest) {
         TokenStore.LoginUser user = currentUser(httpRequest);
         return Result.ok(outboundService.createFromOrder(orderId, request, user));
@@ -215,8 +213,7 @@ public class SalesController {
     public Result<List<SalesOutboundDtos.ListResponse>> outboundsByDateRange(
             @RequestParam LocalDate startDate,
             @RequestParam LocalDate endDate) {
-        // Note: findByDateRange method needs to be added to SalesOutboundService
-        return Result.ok(List.of()); // Placeholder
+        return Result.ok(outboundService.findByDateRange(startDate, endDate));
     }
 
     private TokenStore.LoginUser currentUser(HttpServletRequest request) {

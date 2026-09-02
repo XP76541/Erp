@@ -97,7 +97,7 @@ public class SalesOrderService {
         if (customer == null || customer.getIsActive() == 0) {
             throw new BusinessException("客户不存在或已停用");
         }
-        User salesperson = userMapper.selectById(request.getSalespersonId());
+        SysUser salesperson = userMapper.selectById(request.getSalespersonId());
         if (salesperson == null || salesperson.getIsActive() == 0) {
             throw new BusinessException("销售人员不存在或已停用");
         }
@@ -151,7 +151,7 @@ public class SalesOrderService {
         // 更新审核字段
         doc.setStatus("AUDITED");
         doc.setAuditBy(user.userId());
-        doc.setAuditAt(LocalDate.now());
+        doc.setAuditAt(java.time.LocalDateTime.now());
         orderMapper.updateById(doc);
 
         // 操作日志(审计留痕)
@@ -193,18 +193,24 @@ public class SalesOrderService {
     }
 
     /** 查询客户的销售订单 */
-    public List<SalesOrder> findByCustomerId(Long customerId) {
-        return orderMapper.selectByCustomerId(customerId);
+    public List<SalesOrderDtos.ListResponse> findByCustomerId(Long customerId) {
+        return orderMapper.selectByCustomerId(customerId).stream()
+                .map(this::toListResponse)
+                .toList();
     }
 
     /** 查询销售人员的销售订单 */
-    public List<SalesOrder> findBySalespersonId(Long salespersonId) {
-        return orderMapper.selectBySalespersonId(salespersonId);
+    public List<SalesOrderDtos.ListResponse> findBySalespersonId(Long salespersonId) {
+        return orderMapper.selectBySalespersonId(salespersonId).stream()
+                .map(this::toListResponse)
+                .toList();
     }
 
     /** 查询指定日期范围内的销售订单 */
-    public List<SalesOrder> findByDateRange(LocalDate startDate, LocalDate endDate) {
-        return orderMapper.selectByDateRange(startDate, endDate);
+    public List<SalesOrderDtos.ListResponse> findByDateRange(LocalDate startDate, LocalDate endDate) {
+        return orderMapper.selectByDateRange(startDate, endDate).stream()
+                .map(this::toListResponse)
+                .toList();
     }
 
     /** 查询待审核的销售订单数量 */
