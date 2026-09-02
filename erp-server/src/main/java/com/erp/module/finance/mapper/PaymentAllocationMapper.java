@@ -1,7 +1,7 @@
 package com.erp.module.finance.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.baomidou.mybatisplus.annotation.Select;
+import org.apache.ibatis.annotations.Select;
 import com.erp.module.finance.entity.PaymentAllocation;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

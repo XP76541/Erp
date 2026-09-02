@@ -4,13 +4,16 @@ import com.erp.common.Result;
 import com.erp.common.PageResult;
 import com.erp.module.system.TokenStore;
 import com.erp.module.finance.service.PaymentService;
+import com.erp.module.finance.service.ReceivableService;
 import com.erp.module.finance.dto.PaymentDtos;
+import com.erp.module.finance.dto.ReceivableDtos;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.servlet.http.HttpServletRequest;
-import javax.annotation.Resource;
+import com.erp.module.finance.entity.Payment;
+import jakarta.annotation.Resource;
 import java.util.List;
 
 @RestController
@@ -20,11 +23,14 @@ public class PaymentController {
     @Resource
     private PaymentService paymentService;
 
+    @Resource
+    private ReceivableService receivableService;
+
     @PostMapping
     public Result<Long> create(@RequestBody PaymentDtos.PaymentCreateRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
         Payment payment = paymentService.createDraft(request, currentUser);
-        return Result.success(payment.getId());
+        return Result.ok(payment.getId());
     }
 
     @PutMapping("/{id}/audit")
@@ -33,7 +39,7 @@ public class PaymentController {
         HttpServletRequest req = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
         String ip = req.getRemoteAddr();
         paymentService.audit(id, currentUser, ip);
-        return Result.success();
+        return Result.ok();
     }
 
     @GetMapping
@@ -50,30 +56,30 @@ public class PaymentController {
         params.setSize(size);
 
         PageResult<PaymentDtos.PaymentListResponse> result = paymentService.getPayments(params);
-        return Result.success(result);
+        return Result.ok(result);
     }
 
     @GetMapping("/receivables/{customerId}")
     public Result<List<PaymentDtos.ReceivableListResponse>> getReceivablesByCustomer(@PathVariable Long customerId) {
         List<PaymentDtos.ReceivableListResponse> receivables = paymentService.getReceivablesByCustomer(customerId);
-        return Result.success(receivables);
+        return Result.ok(receivables);
     }
 
     @GetMapping("/statistics")
-    public Result<List<PaymentDtos.ReceivableStatisticsResponse>> getStatistics() {
-        List<PaymentDtos.ReceivableStatisticsResponse> statistics = paymentService.getCustomerStatistics();
-        return Result.success(statistics);
+    public Result<List<ReceivableDtos.ReceivableStatisticsResponse>> getStatistics() {
+        List<ReceivableDtos.ReceivableStatisticsResponse> statistics = receivableService.getCustomerStatistics();
+        return Result.ok(statistics);
     }
 
     @GetMapping("/aging-analysis")
-    public Result<List<PaymentDtos.AgingAnalysisResponse>> getAgingAnalysis() {
-        List<PaymentDtos.AgingAnalysisResponse> analysis = paymentService.getAgingAnalysis();
-        return Result.success(analysis);
+    public Result<List<ReceivableDtos.AgingAnalysisResponse>> getAgingAnalysis() {
+        List<ReceivableDtos.AgingAnalysisResponse> analysis = receivableService.getAgingAnalysis();
+        return Result.ok(analysis);
     }
 
     @GetMapping("/overdue")
-    public Result<List<PaymentDtos.ReceivableListResponse>> getOverdueReceivables() {
-        List<PaymentDtos.ReceivableListResponse> overdue = paymentService.getOverdueReceivables();
-        return Result.success(overdue);
+    public Result<List<ReceivableDtos.ReceivableListResponse>> getOverdueReceivables() {
+        List<ReceivableDtos.ReceivableListResponse> overdue = receivableService.getOverdueReceivables();
+        return Result.ok(overdue);
     }
 }

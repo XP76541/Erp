@@ -341,7 +341,7 @@ public class InventoryWarningService {
 
     private BigDecimal getProductPrice(Long productId) {
         Product product = productMapper.selectById(productId);
-        return product != null ? product.getPrice() : BigDecimal.ZERO;
+        return product != null && product.getSalePrice() != null ? product.getSalePrice() : BigDecimal.ZERO;
     }
 
     private String getProductName(Long productId) {

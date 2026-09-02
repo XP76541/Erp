@@ -1,5 +1,7 @@
 package com.erp.module.inventory.dto;
 
+import com.erp.module.inventory.entity.InventoryCheck;
+import com.erp.module.inventory.entity.InventoryCheckItem;
 import com.erp.common.PageResult;
 import lombok.Data;
 
@@ -86,8 +88,8 @@ public class InventoryCheckDtos {
             this.totalAmount = entity.getTotalAmount();
             this.diffItems = entity.getDiffItems();
             this.diffAmount = entity.getDiffAmount();
-            this.warehouseName = entity.getWarehouseName();
-            this.operatorName = entity.getOperatorName();
+            this.warehouseName = null;
+            this.operatorName = null;
             this.createdAt = entity.getCreatedAt();
             this.remark = entity.getRemark();
             this.items = items;

@@ -24,6 +24,17 @@ public class Result<T> {
         return ok(null);
     }
 
+    /**
+     * Compatibility alias for controllers using the historical method name.
+     */
+    public static <T> Result<T> success(T data) {
+        return ok(data);
+    }
+
+    public static Result<Void> success() {
+        return ok();
+    }
+
     public static <T> Result<T> fail(int code, String message) {
         Result<T> r = new Result<>();
         r.code = code;

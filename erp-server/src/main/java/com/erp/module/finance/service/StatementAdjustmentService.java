@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.erp.common.BusinessException;
 import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.finance.entity.StatementAdjustment;
+import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.mapper.StatementAdjustmentMapper;
 import com.erp.module.finance.mapper.ReceivableMapper;
 import com.erp.module.masterdata.entity.Customer;
@@ -64,7 +65,7 @@ public class StatementAdjustmentService {
         adjustment.setAdjustmentType(request.getAdjustmentType());
         adjustment.setReason(request.getReason());
         adjustment.setRemark(request.getRemark());
-        adjustment.setOperator(user.userId());
+        adjustment.setOperator(String.valueOf(user.userId()));
         adjustment.setOperatorName(user.realName());
         adjustment.setCreatedAt(java.time.LocalDateTime.now());
 
@@ -161,7 +162,7 @@ public class StatementAdjustmentService {
         return statistics.stream()
                 .map(stat -> new ReceivableDtos.AdjustmentStatisticsResponse(
                         stat.getAdjustmentType(),
-                        stat.getCount(),
+                        stat.getCount().intValue(),
                         stat.getTotalAmount()))
                 .collect(java.util.stream.Collectors.toList());
     }

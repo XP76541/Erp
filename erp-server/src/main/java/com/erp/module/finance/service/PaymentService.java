@@ -116,7 +116,7 @@ public class PaymentService {
                 .map(this::convertToListResponse)
                 .collect(Collectors.toList());
 
-        return new PageResult<>(responses, payments.size());
+        return new PageResult<>(payments.size(), responses);
     }
 
     public List<PaymentDtos.ReceivableListResponse> getReceivablesByCustomer(Long customerId) {
@@ -127,8 +127,8 @@ public class PaymentService {
     }
 
     @Transactional
-    private void saveAllocations(Long paymentId, List<PaymentDtos.CreateRequest.AllocationItem> allocations) {
-        for (PaymentDtos.CreateRequest.AllocationItem allocation : allocations) {
+    private void saveAllocations(Long paymentId, List<PaymentDtos.PaymentCreateRequest.AllocationItem> allocations) {
+        for (PaymentDtos.PaymentCreateRequest.AllocationItem allocation : allocations) {
             // 检查核销金额
             Receivable receivable = receivableMapper.selectById(allocation.getReceivableId());
             if (receivable == null) {

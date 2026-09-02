@@ -68,7 +68,7 @@ public class CollectionService {
         record.setContactTime(LocalDateTime.now().toString());
         record.setContactResult(request.getContactResult());
         record.setNextAction(request.getNextAction());
-        record.setOperator(user.userId());
+        record.setOperator(String.valueOf(user.userId()));
         record.setOperatorName(user.realName());
         record.setCreatedAt(LocalDateTime.now());
         record.setUpdatedAt(LocalDateTime.now());
@@ -113,6 +113,17 @@ public class CollectionService {
         List<ReceivableDtos.CollectionResponse> pageRecords = responses.subList(start, end);
 
         return PageResult.of(records.size(), pageRecords);
+    }
+
+    /**
+     * 获取催收记录详情
+     */
+    public ReceivableDtos.CollectionResponse getCollectionRecord(Long id) {
+        CollectionRecord record = collectionRecordMapper.selectById(id);
+        if (record == null) {
+            throw new BusinessException("催收记录不存在");
+        }
+        return convertToResponse(record);
     }
 
     /**
@@ -212,7 +223,7 @@ public class CollectionService {
         response.setContactResult(record.getContactResult());
         response.setNextAction(record.getNextAction());
         response.setOperator(record.getOperatorName());
-        response.setCreatedAt(record.getCreatedAt().toString());
+        response.setCreatedAt(record.getCreatedAt() != null ? record.getCreatedAt().toString() : null);
         return response;
     }
 

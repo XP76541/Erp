@@ -1,5 +1,7 @@
 package com.erp.module.inventory.dto;
 
+import com.erp.module.inventory.entity.InventoryTransfer;
+import com.erp.module.inventory.entity.InventoryTransferItem;
 import com.erp.common.PageResult;
 import lombok.Data;
 

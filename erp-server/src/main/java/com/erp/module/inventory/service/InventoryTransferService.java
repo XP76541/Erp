@@ -233,7 +233,7 @@ public class InventoryTransferService {
         Integer completedCount = transferMapper.selectCount(
                 Wrappers.<InventoryTransfer>lambdaQuery()
                         .eq(InventoryTransfer::getStatus, "COMPLETED")).intValue();
-        BigDecimal totalAmount = transferMapper.selectList(Wrappers.emptyList()).stream()
+        BigDecimal totalAmount = transferMapper.selectList(Wrappers.<InventoryTransfer>emptyWrapper()).stream()
                 .map(InventoryTransfer::getTotalAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 

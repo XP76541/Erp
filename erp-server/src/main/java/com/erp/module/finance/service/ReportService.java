@@ -41,14 +41,6 @@ public class ReportService {
     private final ProductMapper productMapper;
     private final WarehouseMapper warehouseMapper;
     private final InventoryService inventoryService;
-        this.outboundMapper = outboundMapper;
-        this.outboundItemMapper = outboundItemMapper;
-        this.receivableMapper = receivableMapper;
-        this.customerMapper = customerMapper;
-        this.productMapper = productMapper;
-        this.warehouseMapper = warehouseMapper;
-        this.inventoryService = inventoryService;
-    }
 
     /**
      * 销售日报表

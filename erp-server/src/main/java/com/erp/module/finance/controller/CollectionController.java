@@ -3,8 +3,6 @@ package com.erp.module.finance.controller;
 import com.erp.common.Result;
 import com.erp.common.PageResult;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.erp.common.Result;
-import com.erp.common.PageResult;
 import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.finance.entity.CollectionRecord;
 import com.erp.module.finance.entity.Receivable;
@@ -98,8 +96,7 @@ public class CollectionController {
                     response.setOperator(null);
                     response.setCreatedAt(receivable.getCreatedAt().toString());
                     return response;
-                })
-                collect(Collectors.toList());
+                }).collect(Collectors.toList());
         return Result.ok(responses);
     }
 
@@ -134,8 +131,7 @@ public class CollectionController {
                     response.setOperator(record.getOperatorName());
                     response.setCreatedAt(record.getCreatedAt().toString());
                     return response;
-                })
-                collect(Collectors.toList());
+                }).collect(Collectors.toList());
         return Result.ok(responses);
     }
 
@@ -144,27 +140,6 @@ public class CollectionController {
      */
     @GetMapping("/{id}")
     public Result<ReceivableDtos.CollectionResponse> getDetail(@PathVariable Long id) {
-        // 获取催收记录并转换为响应
-        List<CollectionRecord> records = collectionService.collectionRecordMapper.selectList(
-                Wrappers.lambdaQuery()
-                        .eq(CollectionRecord::getId, id)
-                        .last("LIMIT 1"));
-        if (records.isEmpty()) {
-            return Result.fail("催收记录不存在");
-        }
-
-        CollectionRecord record = records.get(0);
-        ReceivableDtos.CollectionResponse response = new ReceivableDtos.CollectionResponse();
-        response.setId(record.getId());
-        response.setReceivableDocNo(record.getReceivableDocNo());
-        response.setCustomerId(record.getCustomerId());
-        response.setCustomerName(record.getCustomerName());
-        response.setAmount(record.getAmount());
-        response.setContactMethod(record.getContactMethod());
-        response.setContactResult(record.getContactResult());
-        response.setNextAction(record.getNextAction());
-        response.setOperator(record.getOperatorName());
-        response.setCreatedAt(record.getCreatedAt().toString());
-        return Result.ok(response);
+        return Result.ok(collectionService.getCollectionRecord(id));
     }
 }

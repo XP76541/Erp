@@ -112,8 +112,8 @@ public class ReceivableService {
             receivable.setCustomerId(request.getCustomerId());
             receivable.setCustomerName(customer.getName());
             receivable.setBusinessDate(bizDate);
-            receivable.setDueDate(bizDate.plusDays(customer.getCreditTerm() != null ?
-                    customer.getCreditTerm() : 0));
+            receivable.setDueDate(bizDate.plusDays(customer.getPaymentTermDays() != null ?
+                    customer.getPaymentTermDays() : 0));
             receivable.setAmount(item.getAmount());
             receivable.setPaidAmount(BigDecimal.ZERO);
             receivable.setRemainingAmount(item.getAmount());
@@ -204,7 +204,7 @@ public class ReceivableService {
      * 获取客户应收账款统计
      */
     public List<ReceivableDtos.ReceivableStatisticsResponse> getCustomerStatistics() {
-        List<Receivable.ReceivableStatistics> statistics = receivableMapper.getCustomerReceivableStatistics();
+        List<ReceivableMapper.ReceivableStatistics> statistics = receivableMapper.getCustomerReceivableStatistics();
         return statistics.stream()
                 .map(stat -> {
                     Customer customer = customerMapper.selectById(stat.getCustomerId());
@@ -225,7 +225,7 @@ public class ReceivableService {
      * 获取账龄分析
      */
     public List<ReceivableDtos.AgingAnalysisResponse> getAgingAnalysis() {
-        List<Receivable.AgingAnalysis> analysis = receivableMapper.getAgingAnalysis();
+        List<ReceivableMapper.AgingAnalysis> analysis = receivableMapper.getAgingAnalysis();
         return analysis.stream()
                 .map(analysisData -> new ReceivableDtos.AgingAnalysisResponse(
                         analysisData.getAgingBucket(),

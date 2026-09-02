@@ -1,5 +1,7 @@
 package com.erp.module.inventory.dto;
 
+import com.erp.module.inventory.entity.InventoryWarning;
+import com.erp.module.inventory.entity.InventoryWarningConfig;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -130,16 +132,6 @@ public class InventoryWarningDtos {
         private String remark;
         private String operatorName;
 
-        public WarningLog(InventoryWarningLog entity) {
-            this.id = entity.getId();
-            this.warningId = entity.getWarningId();
-            this.oldQty = entity.getOldQty();
-            this.newQty = entity.getNewQty();
-            this.operatorId = entity.getOperatorId();
-            this.operationTime = entity.getOperationTime();
-            this.operationType = entity.getOperationType();
-            this.remark = entity.getRemark();
-        }
     }
 
     /**

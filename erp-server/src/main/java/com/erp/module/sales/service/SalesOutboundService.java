@@ -182,7 +182,11 @@ public class SalesOutboundService {
         outbound.setTotalAmount(totalAmount);
         outboundMapper.updateById(outbound);
 
-        return new SalesOutboundDtos.CreateFromOrderResponse(outbound.getId(), outbound.getDocNo(), outboundItems);
+        SalesOutboundDtos.CreateFromOrderResponse response = new SalesOutboundDtos.CreateFromOrderResponse();
+        response.setOutboundId(outbound.getId());
+        response.setOutboundDocNo(outbound.getDocNo());
+        response.setItems(outboundItems);
+        return response;
     }
 
     /**
@@ -228,7 +232,6 @@ public class SalesOutboundService {
         receivable.setPaidAmount(BigDecimal.ZERO);
         receivable.setRemainingAmount(outbound.getTotalAmount());
         receivable.setStatus("UNSETTLED");
-        receivable.setCreatedBy(user.userId());
         receivableMapper.insert(receivable);
 
         // ④ 更新订单发货状态
@@ -272,13 +275,24 @@ public class SalesOutboundService {
     }
 
     /** 查询客户的出库单 */
-    public List<SalesOutbound> findByCustomerId(Long customerId) {
-        return outboundMapper.selectByCustomerId(customerId);
+    public List<SalesOutboundDtos.ListResponse> findByCustomerId(Long customerId) {
+        return outboundMapper.selectByCustomerId(customerId).stream()
+                .map(this::toListResponse)
+                .toList();
     }
 
     /** 查询指定仓库的出库单 */
-    public List<SalesOutbound> findByWarehouseId(Long warehouseId) {
-        return outboundMapper.selectByWarehouseId(warehouseId);
+    public List<SalesOutboundDtos.ListResponse> findByWarehouseId(Long warehouseId) {
+        return outboundMapper.selectByWarehouseId(warehouseId).stream()
+                .map(this::toListResponse)
+                .toList();
+    }
+
+    /** 查询指定日期范围内的出库单 */
+    public List<SalesOutboundDtos.ListResponse> findByDateRange(LocalDate startDate, LocalDate endDate) {
+        return outboundMapper.selectByDateRange(startDate, endDate).stream()
+                .map(this::toListResponse)
+                .toList();
     }
 
     /** 查询待审核的出库单数量 */

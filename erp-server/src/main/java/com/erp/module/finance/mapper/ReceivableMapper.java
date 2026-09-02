@@ -1,7 +1,8 @@
 package com.erp.module.finance.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.baomidou.mybatisplus.annotation.Update;
+import org.apache.ibatis.annotations.Update;
+import lombok.Data;
 import com.erp.module.finance.entity.Receivable;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

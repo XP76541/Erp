@@ -36,9 +36,7 @@ public class ExceptionController {
     @GetMapping("/open")
     public Result<List<ReceivableDtos.CollectionResponse>> getOpenExceptions() {
         // 通过服务方法获取异常列表
-        List<com.erp.module.finance.entity.ReceivableException> exceptions = exceptionService.getOpenExceptions().stream().collect(java.util.stream.Collectors.toList())(
-                com.baomidou.mybatisplus.core.toolkit.Wrappers.<com.erp.module.finance.entity.ReceivableException>lambdaQuery()
-                        .eq(com.erp.module.finance.entity.ReceivableException::getStatus, "OPEN"));
+        List<com.erp.module.finance.entity.ReceivableException> exceptions = exceptionService.getOpenExceptions();
 
         return Result.ok(exceptions.stream()
                 .map(exception -> {

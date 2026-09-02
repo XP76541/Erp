@@ -1,5 +1,6 @@
 package com.erp.module.finance.dto;
 
+import com.erp.module.finance.entity.Receivable;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -123,11 +124,30 @@ public class ReceivableDtos {
         private Integer countOverdue;
         private List<AgingDistribution> agingDistribution;
 
-        @Data
+        public CustomerReceivableSummary(Long customerId, String customerName,
+                                         BigDecimal totalReceivable, BigDecimal totalPaid,
+                                         BigDecimal totalOverdue, Integer countUnsettled,
+                                         Integer countOverdue, List<AgingDistribution> agingDistribution) {
+            this.customerId = customerId;
+            this.customerName = customerName;
+            this.totalReceivable = totalReceivable;
+            this.totalPaid = totalPaid;
+            this.totalOverdue = totalOverdue;
+            this.countUnsettled = countUnsettled;
+            this.countOverdue = countOverdue;
+            this.agingDistribution = agingDistribution;
+        }
+
         public static class AgingDistribution {
             private String bucket;
             private BigDecimal amount;
             private Integer count;
+
+            public AgingDistribution(String bucket, BigDecimal amount, Integer count) {
+                this.bucket = bucket;
+                this.amount = amount;
+                this.count = count;
+            }
         }
     }
 
@@ -161,6 +181,15 @@ public class ReceivableDtos {
         private BigDecimal settledAmount;
         private String status;
         private String message;
+
+        public SettleResponse(Long paymentId, String paymentNo, BigDecimal settledAmount,
+                              String status, String message) {
+            this.paymentId = paymentId;
+            this.paymentNo = paymentNo;
+            this.settledAmount = settledAmount;
+            this.status = status;
+            this.message = message;
+        }
     }
 
     /**
@@ -215,7 +244,7 @@ public class ReceivableDtos {
         private String contactResult;
         private String nextAction;
         private String operator;
-        private LocalDateTime createdAt;
+        private String createdAt;
     }
 
     /**
@@ -263,6 +292,21 @@ public class ReceivableDtos {
         private BigDecimal adjustments;
         private BigDecimal closingBalance;
         private List<StatementDetail> details;
+
+        public StatementResponse(Long customerId, String customerName, LocalDate statementDate,
+                                 BigDecimal openingBalance, BigDecimal currentReceivables,
+                                 BigDecimal payments, BigDecimal adjustments, BigDecimal closingBalance,
+                                 List<StatementDetail> details) {
+            this.customerId = customerId;
+            this.customerName = customerName;
+            this.statementDate = statementDate;
+            this.openingBalance = openingBalance;
+            this.currentReceivables = currentReceivables;
+            this.payments = payments;
+            this.adjustments = adjustments;
+            this.closingBalance = closingBalance;
+            this.details = details;
+        }
 
         @Data
         public static class StatementDetail {
@@ -361,6 +405,13 @@ public class ReceivableDtos {
             private String exceptionLevel;
             private Long count;
             private Long openCount;
+
+            public TypeStatistics(String exceptionType, String exceptionLevel, Long count, Long openCount) {
+                this.exceptionType = exceptionType;
+                this.exceptionLevel = exceptionLevel;
+                this.count = count;
+                this.openCount = openCount;
+            }
         }
     }
 

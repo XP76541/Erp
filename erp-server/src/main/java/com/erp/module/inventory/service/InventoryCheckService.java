@@ -183,7 +183,7 @@ public class InventoryCheckService {
                 item.setDiffQty(result.getActualQty().subtract(item.getSystemQty()));
 
                 // 计算金额
-                BigDecimal price = productMapper.selectById(result.getProductId()).getPrice();
+                BigDecimal price = productMapper.selectById(result.getProductId()).getSalePrice();
                 item.setPrice(price);
                 item.setAmount(price.multiply(result.getActualQty()).setScale(2, RoundingMode.HALF_UP));
 
@@ -245,7 +245,7 @@ public class InventoryCheckService {
 
     /** 根据仓库ID查询盘点列表 */
     public List<InventoryCheckDtos.WarehouseResponse> listByWarehouse(Long warehouseId) {
-        List<InventoryCheck> checks = checkMapper.selectByWarehouseId(warehouseId);
+        List<InventoryCheck> checks = checkMapper.selectByWarehouseAndDate(warehouseId, LocalDate.now());
         return checks.stream()
                 .map(InventoryCheckDtos.WarehouseResponse::new)
                 .toList();
@@ -264,7 +264,7 @@ public class InventoryCheckService {
                         .eq(InventoryCheck::getStatus, "AUDITED")).intValue();
 
         // 查询总金额和差异数据
-        List<InventoryCheck> allChecks = checkMapper.selectList(Wrappers.emptyWrapper());
+        List<InventoryCheck> allChecks = checkMapper.selectList(Wrappers.<InventoryCheck>emptyWrapper());
         BigDecimal totalAmount = allChecks.stream()
                 .map(InventoryCheck::getTotalAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
