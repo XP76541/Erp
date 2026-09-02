@@ -24,6 +24,16 @@ public class Result<T> {
         return ok(null);
     }
 
+    /** Backward-compatible alias used by controllers. */
+    public static <T> Result<T> success(T data) {
+        return ok(data);
+    }
+
+    /** Backward-compatible alias for successful responses without a payload. */
+    public static Result<Void> success() {
+        return ok();
+    }
+
     public static <T> Result<T> fail(int code, String message) {
         Result<T> r = new Result<>();
         r.code = code;

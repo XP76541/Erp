@@ -86,8 +86,6 @@ public class InventoryCheckDtos {
             this.totalAmount = entity.getTotalAmount();
             this.diffItems = entity.getDiffItems();
             this.diffAmount = entity.getDiffAmount();
-            this.warehouseName = entity.getWarehouseName();
-            this.operatorName = entity.getOperatorName();
             this.createdAt = entity.getCreatedAt();
             this.remark = entity.getRemark();
             this.items = items;
