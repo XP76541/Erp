@@ -5,8 +5,8 @@
 -- ============================================================
 
 -- 为purchase_inbound表添加关联字段
-ALTER TABLE purchase_inbound ADD COLUMN doc_type NVARCHAR(20) NULL; -- PURCHASE_ORDER / PURCHASE_RETURN
-ALTER TABLE purchase_inbound ADD COLUMN doc_id BIGINT NULL;      -- 来源单据ID，如采购订单ID
+ALTER TABLE purchase_inbound ADD doc_type NVARCHAR(20) NULL; -- PURCHASE_ORDER / PURCHASE_RETURN
+ALTER TABLE purchase_inbound ADD doc_id BIGINT NULL;      -- 来源单据ID，如采购订单ID
 GO
 
 -- 为doc_type和doc_id添加索引

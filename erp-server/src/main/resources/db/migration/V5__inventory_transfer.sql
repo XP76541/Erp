@@ -66,13 +66,9 @@ CREATE INDEX idx_transfer_item_product ON inventory_transfer_item (product_id);
 GO
 
 -- 创建库存调拨文档序列
-INSERT INTO sys_doc_sequence (code, name, prefix, cycle, length, current_year, current_number)
-VALUES
-    ('TRANSFER', '库存调拨单', 'TF', 'YEAR', 8, YEAR(GETDATE()), 1);
-GO
-
--- 更新现有文档序列
-UPDATE sys_doc_sequence
-SET current_number = current_number + 1
-WHERE code = 'TRANSFER';
+IF NOT EXISTS (SELECT 1 FROM doc_sequence WHERE doc_type = 'TF' AND period = 'ALL')
+BEGIN
+    INSERT INTO doc_sequence (doc_type, period, next_no)
+    VALUES ('TF', 'ALL', 1);
+END;
 GO

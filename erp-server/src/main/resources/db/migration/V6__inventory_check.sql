@@ -69,13 +69,9 @@ CREATE INDEX idx_check_item_warehouse ON inventory_check_item (warehouse_id);
 GO
 
 -- 创建库存盘点文档序列
-INSERT INTO sys_doc_sequence (code, name, prefix, cycle, length, current_year, current_number)
-VALUES
-    ('CHECK', '库存盘点单', 'CHK', 'YEAR', 8, YEAR(GETDATE()), 1);
-GO
-
--- 更新现有文档序列
-UPDATE sys_doc_sequence
-SET current_number = current_number + 1
-WHERE code = 'CHECK';
+IF NOT EXISTS (SELECT 1 FROM doc_sequence WHERE doc_type = 'CHK' AND period = 'ALL')
+BEGIN
+    INSERT INTO doc_sequence (doc_type, period, next_no)
+    VALUES ('CHK', 'ALL', 1);
+END;
 GO
