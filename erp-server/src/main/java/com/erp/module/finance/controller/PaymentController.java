@@ -1,85 +1,48 @@
 package com.erp.module.finance.controller;
 
-import com.erp.common.Result;
 import com.erp.common.PageResult;
-import com.erp.module.system.TokenStore;
-import com.erp.module.finance.service.PaymentService;
-import com.erp.module.finance.service.ReceivableService;
+import com.erp.common.Result;
 import com.erp.module.finance.dto.PaymentDtos;
-import com.erp.module.finance.dto.ReceivableDtos;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
-
-import jakarta.servlet.http.HttpServletRequest;
 import com.erp.module.finance.entity.Payment;
-import jakarta.annotation.Resource;
-import java.util.List;
+import com.erp.module.finance.service.PaymentService;
+import com.erp.module.system.AuthInterceptor;
+import com.erp.module.system.TokenStore;
+import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/finance/payments")
+@RequiredArgsConstructor
 public class PaymentController {
-
-    @Resource
-    private PaymentService paymentService;
-
-    @Resource
-    private ReceivableService receivableService;
+    private final PaymentService paymentService;
 
     @PostMapping
-    public Result<Long> create(@RequestBody PaymentDtos.PaymentCreateRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        Payment payment = paymentService.createDraft(request, currentUser);
+    public Result<Long> create(@Valid @RequestBody PaymentDtos.PaymentCreateRequest request, HttpServletRequest httpRequest) {
+        Payment payment = paymentService.createDraft(request, currentUser(httpRequest));
         return Result.ok(payment.getId());
     }
 
     @PutMapping("/{id}/audit")
-    public Result<Void> audit(@PathVariable Long id, @RequestBody PaymentDtos.PaymentAuditRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        HttpServletRequest req = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
-        String ip = req.getRemoteAddr();
-        paymentService.audit(id, currentUser, ip);
+    public Result<Void> audit(@PathVariable Long id, HttpServletRequest httpRequest) {
+        paymentService.audit(id, currentUser(httpRequest), httpRequest.getRemoteAddr());
         return Result.ok();
     }
 
     @GetMapping
     public Result<PageResult<PaymentDtos.PaymentListResponse>> list(
-            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
-
+            @RequestParam(required = false) java.time.LocalDate startDate,
+            @RequestParam(required = false) java.time.LocalDate endDate) {
         PaymentDtos.PaymentListRequest params = new PaymentDtos.PaymentListRequest();
-        params.setCustomerId(customerId);
-        params.setStatus(status);
-        params.setPage(page);
-        params.setSize(size);
-
-        PageResult<PaymentDtos.PaymentListResponse> result = paymentService.getPayments(params);
-        return Result.ok(result);
+        params.setSupplierId(supplierId); params.setStatus(status);
+        params.setStartDate(startDate); params.setEndDate(endDate);
+        return Result.ok(paymentService.getPayments(params));
     }
 
-    @GetMapping("/receivables/{customerId}")
-    public Result<List<PaymentDtos.ReceivableListResponse>> getReceivablesByCustomer(@PathVariable Long customerId) {
-        List<PaymentDtos.ReceivableListResponse> receivables = paymentService.getReceivablesByCustomer(customerId);
-        return Result.ok(receivables);
-    }
-
-    @GetMapping("/statistics")
-    public Result<List<ReceivableDtos.ReceivableStatisticsResponse>> getStatistics() {
-        List<ReceivableDtos.ReceivableStatisticsResponse> statistics = receivableService.getCustomerStatistics();
-        return Result.ok(statistics);
-    }
-
-    @GetMapping("/aging-analysis")
-    public Result<List<ReceivableDtos.AgingAnalysisResponse>> getAgingAnalysis() {
-        List<ReceivableDtos.AgingAnalysisResponse> analysis = receivableService.getAgingAnalysis();
-        return Result.ok(analysis);
-    }
-
-    @GetMapping("/overdue")
-    public Result<List<ReceivableDtos.ReceivableListResponse>> getOverdueReceivables() {
-        List<ReceivableDtos.ReceivableListResponse> overdue = receivableService.getOverdueReceivables();
-        return Result.ok(overdue);
+    private TokenStore.LoginUser currentUser(HttpServletRequest request) {
+        return (TokenStore.LoginUser) request.getAttribute(AuthInterceptor.ATTR_LOGIN_USER);
     }
 }

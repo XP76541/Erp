@@ -46,7 +46,9 @@
             <el-icon><Wallet /></el-icon>
             <span>财务管理</span>
           </template>
-          <el-menu-item index="/finance/payments">付款核销</el-menu-item>
+          <el-menu-item index="/finance/payables">应付账款</el-menu-item>
+          <el-menu-item index="/finance/payables">应付账款</el-menu-item>
+          <el-menu-item index="/finance/payments">供应商付款</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="inventory" disabled>

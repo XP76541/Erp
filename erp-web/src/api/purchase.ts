@@ -1,6 +1,44 @@
-import { http } from './http';
+import http, { type PageResult } from './http';
 
 // 采购订单相关接口
+export interface PurchaseInboundItemInput {
+  productId: number;
+  warehouseId?: number;
+  qty: number;
+  price: number;
+  note?: string;
+}
+
+export interface PurchaseInboundCreateRequest {
+  supplierId: number;
+  warehouseId: number;
+  bizDate?: string;
+  docType?: string;
+  docId?: number;
+  remark?: string;
+  items: PurchaseInboundItemInput[];
+}
+
+export interface PurchaseInboundListResponse {
+  id: number;
+  docNo: string;
+  supplierId: number;
+  warehouseId: number;
+  bizDate: string;
+  status: string;
+  docType?: string;
+  docId?: number;
+  auditAt?: string;
+  remark?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PurchaseInboundDetailResponse {
+  doc: PurchaseInboundListResponse;
+  items: PurchaseInboundItemInput[];
+}
+
 export interface PurchaseOrderItemInput {
   productId: number;
   qty: number;
@@ -95,6 +133,15 @@ export const PurchaseOrderStatus = {
 
 export type PurchaseOrderStatusType = typeof PurchaseOrderStatus[keyof typeof PurchaseOrderStatus];
 
+// 采购入库单API
+export const purchaseInboundApi = {
+  list: (params: { keyword?: string; status?: string; page?: number; size?: number }) =>
+    http.get<PageResult<PurchaseInboundListResponse>>('/purchase-inbounds', { params }),
+  detail: (id: number) => http.get<PurchaseInboundDetailResponse>(`/purchase-inbounds/${id}`),
+  create: (data: PurchaseInboundCreateRequest) => http.post<number>('/purchase-inbounds', data),
+  audit: (id: number) => http.put<void>(`/purchase-inbounds/${id}/audit`),
+};
+
 // 采购订单API
 export const purchaseOrderApi = {
   // 分页查询
@@ -158,28 +205,3 @@ export const purchaseOrderApi = {
     http.put<void>(`/purchase/orders/${orderId}/received-qty`, { items }),
 };
 
-// 采购入库单API（已存在）
-export const purchaseInboundApi = {
-  list: (params: {
-    keyword?: string;
-    status?: string;
-    supplierId?: number;
-    page?: number;
-    size?: number;
-  }) => http.get<PageResult<any>>('/purchase/inbounds', { params }),
-
-  create: (data: any) =>
-    http.post<number>('/purchase/inbounds', data),
-
-  audit: (id: number, data: any) =>
-    http.put<void>(`/purchase/inbounds/${id}/audit`, data),
-};
-
-// 通用响应类型
-interface PageResult<T> {
-  records: T[];
-  total: number;
-  size: number;
-  current: number;
-  pages: number;
-}

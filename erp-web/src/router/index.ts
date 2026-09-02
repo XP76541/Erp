@@ -53,6 +53,12 @@ const routes: RouteRecordRaw[] = [
         path: 'finance/payments',
         name: 'payments',
         component: () => import('@/views/finance/PaymentList.vue'),
+        meta: { title: '供应商付款' },
+      },
+      {
+        path: 'finance/payables',
+        name: 'payments',
+        component: () => import('@/views/finance/PaymentList.vue'),
         meta: { title: '付款核销' },
       },
       {
@@ -72,12 +78,6 @@ const routes: RouteRecordRaw[] = [
         name: 'salesOutbounds',
         component: () => import('@/views/sales/SalesOutboundList.vue'),
         meta: { title: '销售出库单' },
-      },
-      {
-        path: 'finance/payments',
-        name: 'payments',
-        component: () => import('@/views/finance/PaymentList.vue'),
-        meta: { title: '收款核销' },
       },
       {
         path: 'finance/aging-report',

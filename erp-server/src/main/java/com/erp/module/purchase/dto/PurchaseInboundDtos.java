@@ -28,6 +28,11 @@ public class PurchaseInboundDtos {
         @NotNull(message = "入库仓不能为空")
         private Long warehouseId;
 
+        /** 来源采购订单,直接入库时为空 */
+        private String docType;
+
+        private Long docId;
+
         /** 业务日期,空则服务端取今天 */
         private LocalDate bizDate;
 

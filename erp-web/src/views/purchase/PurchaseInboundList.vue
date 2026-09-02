@@ -130,8 +130,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { purchaseApi } from '@/api/purchase'
-import type { PurchaseInbound } from '@/api/purchase'
+import { purchaseInboundApi } from '@/api/purchase'
+import type { PurchaseInboundCreateRequest, PurchaseInboundListResponse } from '@/api/purchase'
 import { supplierApi } from '@/api/supplier'
 import type { Supplier } from '@/api/supplier'
 import { warehouseApi } from '@/api/warehouse'
@@ -141,7 +141,7 @@ import type { Product } from '@/api/product'
 
 const loading = ref(false)
 const saving = ref(false)
-const list = ref<PurchaseInbound[]>([])
+const list = ref<PurchaseInboundListResponse[]>([])
 const total = ref(0)
 const suppliers = ref<Supplier[]>([])
 const warehouses = ref<Warehouse[]>([])
@@ -181,7 +181,7 @@ function warehouseName(id?: number) {
 async function load() {
   loading.value = true
   try {
-    const data = await purchaseApi.page({ ...query, status: query.status || undefined })
+    const data = await purchaseInboundApi.list({ ...query, status: query.status || undefined })
     list.value = data.records
     total.value = data.total
   } catch {
@@ -216,7 +216,7 @@ async function handleSave() {
 
   saving.value = true
   try {
-    await purchaseApi.create({
+    await purchaseInboundApi.create({
       supplierId: form.supplierId!,
       warehouseId: form.warehouseId!,
       bizDate: form.bizDate,
@@ -244,7 +244,7 @@ async function handleAudit(row: PurchaseInbound) {
     return
   }
   try {
-    await purchaseApi.audit(row.id!)
+    await purchaseInboundApi.audit(row.id!)
     ElMessage.success('审核成功:库存与应付已更新')
     await load()
   } catch {

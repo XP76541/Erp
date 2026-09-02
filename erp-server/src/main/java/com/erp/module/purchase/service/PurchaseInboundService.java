@@ -31,7 +31,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 采购入库单(F201/US-201):草稿创建 + 审核
@@ -108,10 +110,13 @@ public class PurchaseInboundService {
             throw new BusinessException("明细不能为空");
         }
         LocalDate bizDate = request.getBizDate() == null ? LocalDate.now() : request.getBizDate();
+        Set<Long> productIds = new HashSet<>();
 
         PurchaseInbound doc = new PurchaseInbound();
         doc.setDocNo(docSequenceService.nextDocNo("PIN", "PIN", bizDate.format(PERIOD)));
         doc.setSupplierId(request.getSupplierId());
+        doc.setDocType(request.getDocType());
+        doc.setDocId(request.getDocId());
         doc.setWarehouseId(request.getWarehouseId());
         doc.setBizDate(bizDate);
         doc.setStatus("DRAFT");
@@ -126,8 +131,23 @@ public class PurchaseInboundService {
             if (product == null || product.getIsActive() == 0) {
                 throw new BusinessException("第 " + lineNo + " 行商品不存在或已停用");
             }
+            if (!productIds.add(input.getProductId())) {
+                throw new BusinessException("第 " + lineNo + " 行商品重复,请合并数量");
+            }
+            if (input.getQty() == null || input.getQty().signum() <= 0
+                    || input.getQty().scale() > 4) {
+                throw new BusinessException("第 " + lineNo + " 行数量必须大于0且最多4位小数");
+            }
+            if (input.getPrice() == null || input.getPrice().signum() < 0
+                    || input.getPrice().scale() > 2) {
+                throw new BusinessException("第 " + lineNo + " 行进价不能为负且最多2位小数");
+            }
             Long lineWarehouseId = input.getWarehouseId() == null
                     ? request.getWarehouseId() : input.getWarehouseId();
+            Warehouse lineWarehouse = warehouseMapper.selectById(lineWarehouseId);
+            if (lineWarehouse == null || lineWarehouse.getIsActive() == 0) {
+                throw new BusinessException("第 " + lineNo + " 行仓库不存在或已停用");
+            }
             PurchaseInboundItem item = new PurchaseInboundItem();
             item.setInboundId(doc.getId());
             item.setLineNo(lineNo);
@@ -167,6 +187,12 @@ public class PurchaseInboundService {
 
         // ③ 生成应付:到期日 = 业务日期 + 供应商账期
         Supplier supplier = supplierMapper.selectById(doc.getSupplierId());
+        if (payableMapper.existsByDocTypeAndDocId("PURCHASE_IN", doc.getId()) > 0) {
+            throw new BusinessException("该入库单已经生成应付账款");
+        }
+        if (items.isEmpty()) {
+            throw new BusinessException("入库单明细不能为空");
+        }
         Payable payable = new Payable();
         payable.setSupplierId(doc.getSupplierId());
         payable.setDocType("PURCHASE_IN");
@@ -205,10 +231,7 @@ public class PurchaseInboundService {
      * 检查指定采购订单是否已有入库单
      */
     public boolean hasInboundByOrderId(Long orderId) {
-        // 需要在 PurchaseInboundMapper 中添加此方法
-        // return inboundMapper.existsByOrderId(orderId);
-        // 暂时返回 false，实际实现需要根据数据库结构调整
-        return false;
+        return inboundMapper.existsByOrderId(orderId);
     }
 
     /**
@@ -223,9 +246,6 @@ public class PurchaseInboundService {
      * 根据采购订单ID查询关联的入库单
      */
     public List<PurchaseInbound> selectByOrderId(Long orderId) {
-        // 需要在 PurchaseInboundMapper 中添加此方法
-        // return inboundMapper.selectByOrderId(orderId);
-        // 暂时返回空列表，实际实现需要根据数据库结构调整
-        return List.of();
+        return inboundMapper.selectByOrderId(orderId);
     }
 }

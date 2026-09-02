@@ -26,6 +26,12 @@ public class PurchaseInbound {
 
     private Long supplierId;
 
+    /** 来源单据类型,如 PURCHASE_ORDER;直接入库为空 */
+    private String docType;
+
+    /** 来源单据ID */
+    private Long docId;
+
     /** 默认入库仓,明细行可逐行覆盖 */
     private Long warehouseId;
 
