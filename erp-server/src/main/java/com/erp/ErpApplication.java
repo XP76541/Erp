@@ -15,6 +15,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
         "com.erp.module.inventory.mapper",
         "com.erp.module.purchase.mapper",
         "com.erp.module.finance.mapper",
+        "com.erp.module.sales.mapper",
 })
 public class ErpApplication {
 
