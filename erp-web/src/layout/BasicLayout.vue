@@ -62,6 +62,8 @@
           </template>
           <el-menu-item index="/inventory/stocks">即时库存</el-menu-item>
           <el-menu-item index="/inventory/ledgers">出入库流水</el-menu-item>
+          <el-menu-item index="/inventory/transfers">库存调拨</el-menu-item>
+          <el-menu-item index="/inventory/checks">库存盘点</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="system">

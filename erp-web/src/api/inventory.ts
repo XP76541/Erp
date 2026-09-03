@@ -70,16 +70,16 @@ export const inventoryTransferApi = {
   }) => http.post<number>('/inventory/transfers', data),
 
   // 审核库存调拨单
-  auditTransfer: (id: number, ip: string) =>
-    http.put<void>(`/inventory/transfers/${id}/audit`, { ip }),
+  auditTransfer: (id: number) =>
+    http.put<void>(`/inventory/transfers/${id}/audit`),
 
   // 完成库存调拨
-  completeTransfer: (id: number, ip: string) =>
-    http.put<void>(`/inventory/transfers/${id}/complete`, { ip }),
+  completeTransfer: (id: number) =>
+    http.put<void>(`/inventory/transfers/${id}/complete`),
 
   // 取消库存调拨
-  cancelTransfer: (id: number, ip: string) =>
-    http.put<void>(`/inventory/transfers/${id}/cancel`, { ip }),
+  cancelTransfer: (id: number) =>
+    http.put<void>(`/inventory/transfers/${id}/cancel`),
 
   // 根据仓库查询调拨列表
   getTransfersByWarehouse: (warehouseId: number) =>
@@ -189,8 +189,8 @@ export const inventoryCheckApi = {
   }) => http.post<number>('/inventory/checks', data),
 
   // 开始盘点
-  startCheck: (id: number, ip: string) =>
-    http.put<void>(`/inventory/checks/${id}/start-check`, { ip }),
+  startCheck: (id: number) =>
+    http.put<void>(`/inventory/checks/${id}/start-check`),
 
   // 提交盘点结果
   submitCheckResult: (id: number, data: {
@@ -199,16 +199,16 @@ export const inventoryCheckApi = {
       actualQty: number;
       note?: string;
     }>;
-  }, ip: string) =>
-    http.put<void>(`/inventory/checks/${id}/submit-result`, { ...data, ip }),
+  }) =>
+    http.put<void>(`/inventory/checks/${id}/submit-result`, data),
 
   // 审核盘点单
-  auditCheck: (id: number, ip: string) =>
-    http.put<void>(`/inventory/checks/${id}/audit`, { ip }),
+  auditCheck: (id: number) =>
+    http.put<void>(`/inventory/checks/${id}/audit`),
 
   // 取消盘点单
-  cancelCheck: (id: number, ip: string) =>
-    http.put<void>(`/inventory/checks/${id}/cancel`, { ip }),
+  cancelCheck: (id: number) =>
+    http.put<void>(`/inventory/checks/${id}/cancel`),
 
   // 根据仓库查询盘点列表
   getChecksByWarehouse: (warehouseId: number) =>

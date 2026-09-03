@@ -66,6 +66,30 @@ public class SalesOrderDtos {
         private String action; // "audit" or "reject"
 
         private String remark;
+
+        /** 仅管理员/老板可用；服务端会重新授权，不能由客户端自证 */
+        private Boolean forceConfirm = false;
+    }
+
+    /** 客户信用额度快照；outstanding 为当前未核销应收余额 */
+    @Data
+    public static class CreditStatus {
+        private Long customerId;
+        private BigDecimal creditLimit;
+        private BigDecimal outstanding;
+        private BigDecimal available;
+        private Boolean exceeded;
+        private String warning;
+
+        public CreditStatus(Long customerId, BigDecimal creditLimit, BigDecimal outstanding,
+                            BigDecimal available, Boolean exceeded, String warning) {
+            this.customerId = customerId;
+            this.creditLimit = creditLimit;
+            this.outstanding = outstanding;
+            this.available = available;
+            this.exceeded = exceeded;
+            this.warning = warning;
+        }
     }
 
     /** 创建出库单请求 */

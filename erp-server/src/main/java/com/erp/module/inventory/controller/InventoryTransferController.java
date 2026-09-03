@@ -2,13 +2,13 @@ package com.erp.module.inventory.controller;
 
 import com.erp.common.Result;
 import com.erp.common.PageResult;
+import com.erp.module.system.AuthInterceptor;
 import com.erp.module.system.TokenStore;
 import com.erp.module.inventory.entity.InventoryTransfer;
 import com.erp.module.inventory.service.InventoryTransferService;
 import com.erp.module.inventory.dto.InventoryTransferDtos;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 
@@ -51,8 +51,8 @@ public class InventoryTransferController {
      * 创建库存调拨单（草稿）
      */
     @PostMapping
-    public Result<Long> create(@RequestBody InventoryTransferDtos.CreateRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+    public Result<Long> create(@RequestBody InventoryTransferDtos.CreateRequest request, HttpServletRequest httpRequest) {
+        TokenStore.LoginUser currentUser = currentUser(httpRequest);
         Long transferId = inventoryTransferService.create(request, currentUser);
         return Result.success(transferId);
     }
@@ -61,9 +61,9 @@ public class InventoryTransferController {
      * 审核库存调拨单
      */
     @PutMapping("/{id}/audit")
-    public Result<Void> audit(@PathVariable Long id, @RequestBody InventoryTransferDtos.AuditRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        inventoryTransferService.audit(id, currentUser, request.getIp());
+    public Result<Void> audit(@PathVariable Long id, @RequestBody InventoryTransferDtos.AuditRequest request, HttpServletRequest httpRequest) {
+        TokenStore.LoginUser currentUser = currentUser(httpRequest);
+        inventoryTransferService.audit(id, currentUser, httpRequest.getRemoteAddr());
         return Result.success();
     }
 
@@ -71,9 +71,9 @@ public class InventoryTransferController {
      * 完成库存调拨
      */
     @PutMapping("/{id}/complete")
-    public Result<Void> complete(@PathVariable Long id, @RequestBody InventoryTransferDtos.CompleteRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        inventoryTransferService.complete(id, currentUser, request.getIp());
+    public Result<Void> complete(@PathVariable Long id, @RequestBody InventoryTransferDtos.CompleteRequest request, HttpServletRequest httpRequest) {
+        TokenStore.LoginUser currentUser = currentUser(httpRequest);
+        inventoryTransferService.complete(id, currentUser, httpRequest.getRemoteAddr());
         return Result.success();
     }
 
@@ -81,9 +81,9 @@ public class InventoryTransferController {
      * 取消库存调拨
      */
     @PutMapping("/{id}/cancel")
-    public Result<Void> cancel(@PathVariable Long id, @RequestBody InventoryTransferDtos.CancelRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        inventoryTransferService.cancel(id, currentUser, request.getIp());
+    public Result<Void> cancel(@PathVariable Long id, @RequestBody InventoryTransferDtos.CancelRequest request, HttpServletRequest httpRequest) {
+        TokenStore.LoginUser currentUser = currentUser(httpRequest);
+        inventoryTransferService.cancel(id, currentUser, httpRequest.getRemoteAddr());
         return Result.success();
     }
 
@@ -130,5 +130,9 @@ public class InventoryTransferController {
     public Result<Integer> getCompletedCount() {
         Integer count = inventoryTransferService.getStats().getCompletedCount();
         return Result.success(count);
+    }
+
+    private TokenStore.LoginUser currentUser(HttpServletRequest request) {
+        return (TokenStore.LoginUser) request.getAttribute(AuthInterceptor.ATTR_LOGIN_USER);
     }
 }

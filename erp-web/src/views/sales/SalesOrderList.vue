@@ -145,6 +145,9 @@
             <el-radio label="reject">驳回</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item v-if="auditForm.action === 'audit'" label="低价确认">
+          <el-checkbox v-model="auditForm.forceConfirm">确认低于最低限价仍审核</el-checkbox>
+        </el-form-item>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="auditForm.remark" type="textarea" :rows="3" placeholder="请输入备注信息" />
         </el-form-item>
@@ -273,6 +276,7 @@ const auditFormRef = ref<FormInstance>()
 const auditForm = reactive({
   action: 'audit' as 'audit' | 'reject',
   remark: '',
+  forceConfirm: false,
 })
 
 const auditRules: FormRules = {
@@ -396,6 +400,7 @@ async function handleAudit(row: SalesOrder) {
   currentOrder.value = row
   auditForm.action = 'audit'
   auditForm.remark = ''
+  auditForm.forceConfirm = false
   auditDialogVisible.value = true
 }
 

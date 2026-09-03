@@ -14,6 +14,7 @@ import com.erp.module.finance.mapper.ReceivableMapper;
 import com.erp.module.system.TokenStore;
 import com.erp.module.system.service.DocSequenceService;
 import com.erp.module.system.service.OperationLogService;
+import com.erp.module.system.service.SystemAuthorizationService;
 import com.erp.module.sales.entity.SalesOrder;
 import com.erp.module.sales.entity.SalesOrderItem;
 import com.erp.module.sales.entity.SalesOutbound;
@@ -25,8 +26,6 @@ import com.erp.module.sales.mapper.SalesOutboundItemMapper;
 import com.erp.module.sales.dto.SalesOutboundDtos;
 import com.erp.module.sales.dto.SalesOutboundDtos.CreateRequest;
 import com.erp.module.sales.dto.SalesOutboundDtos.ItemInput;
-import com.erp.module.finance.entity.Receivable;
-import com.erp.module.finance.mapper.ReceivableMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -59,6 +58,7 @@ public class SalesOutboundService {
     private final ReceivableMapper receivableMapper;
     private final DocSequenceService docSequenceService;
     private final OperationLogService operationLogService;
+    private final SystemAuthorizationService authorizationService;
 
     public SalesOutboundService(SalesOutboundMapper outboundMapper,
                                SalesOutboundItemMapper outboundItemMapper,
@@ -69,7 +69,8 @@ public class SalesOutboundService {
                                InventoryService inventoryService,
                                ReceivableMapper receivableMapper,
                                DocSequenceService docSequenceService,
-                               OperationLogService operationLogService) {
+                               OperationLogService operationLogService,
+                               SystemAuthorizationService authorizationService) {
         this.outboundMapper = outboundMapper;
         this.outboundItemMapper = outboundItemMapper;
         this.orderMapper = orderMapper;
@@ -80,15 +81,20 @@ public class SalesOutboundService {
         this.receivableMapper = receivableMapper;
         this.docSequenceService = docSequenceService;
         this.operationLogService = operationLogService;
+        this.authorizationService = authorizationService;
     }
 
     /** 分页列表:按单号/客户/状态过滤 */
-    public PageResult<SalesOutboundDtos.ListResponse> page(long page, long size, String keyword, String status, String customerId) {
+    public PageResult<SalesOutboundDtos.ListResponse> page(long page, long size, String keyword, String status, String customerId,
+                                                           TokenStore.LoginUser user) {
+        Long scope = authorizationService.salespersonScope(user);
         Page<SalesOutbound> result = outboundMapper.selectPage(new Page<>(page, size),
                 Wrappers.<SalesOutbound>lambdaQuery()
                         .like(StringUtils.hasText(keyword), SalesOutbound::getDocNo, keyword)
                         .eq(StringUtils.hasText(customerId), SalesOutbound::getCustomerId, customerId)
                         .eq(StringUtils.hasText(status), SalesOutbound::getStatus, status)
+                        .inSql(scope != null, SalesOutbound::getOrderId,
+                                "SELECT id FROM sales_order WHERE salesperson_id = " + scope)
                         .orderByDesc(SalesOutbound::getId));
 
         List<SalesOutboundDtos.ListResponse> listResponses = result.getRecords().stream()
@@ -99,8 +105,9 @@ public class SalesOutboundService {
     }
 
     /** 单据详情(主表+明细) */
-    public SalesOutboundDtos.DetailResponse detail(Long id) {
+    public SalesOutboundDtos.DetailResponse detail(Long id, TokenStore.LoginUser user) {
         SalesOutbound doc = requireOutbound(id);
+        requireSalespersonAccess(doc, user);
         List<SalesOutboundItem> items = outboundItemMapper.selectByOutboundId(id);
         return new SalesOutboundDtos.DetailResponse(doc, items);
     }
@@ -112,6 +119,7 @@ public class SalesOutboundService {
         if (order == null || !"AUDITED".equals(order.getStatus())) {
             throw new BusinessException("销售订单不存在或未审核");
         }
+        authorizationService.requireUnrestrictedOrSalesperson(user, order.getSalespersonId());
 
         Customer customer = customerMapper.selectById(order.getCustomerId());
         if (customer == null || customer.getIsActive() == 0) {
@@ -200,6 +208,7 @@ public class SalesOutboundService {
             throw new BusinessException("单据不存在或不是草稿状态,无法审核");
         }
         SalesOutbound outbound = requireOutbound(id);
+        requireSalespersonAccess(outbound, user);
 
         // ② 库存出库:调用 InventoryService.stockOut
         List<SalesOutboundItem> items = outboundItemMapper.selectByOutboundId(id);
@@ -275,22 +284,30 @@ public class SalesOutboundService {
     }
 
     /** 查询客户的出库单 */
-    public List<SalesOutboundDtos.ListResponse> findByCustomerId(Long customerId) {
+    public List<SalesOutboundDtos.ListResponse> findByCustomerId(Long customerId, TokenStore.LoginUser user) {
+        Customer customer = customerMapper.selectById(customerId);
+        if (customer == null) throw new BusinessException("客户不存在");
+        authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
         return outboundMapper.selectByCustomerId(customerId).stream()
                 .map(this::toListResponse)
                 .toList();
     }
 
     /** 查询指定仓库的出库单 */
-    public List<SalesOutboundDtos.ListResponse> findByWarehouseId(Long warehouseId) {
+    public List<SalesOutboundDtos.ListResponse> findByWarehouseId(Long warehouseId, TokenStore.LoginUser user) {
+        Long scope = authorizationService.salespersonScope(user);
         return outboundMapper.selectByWarehouseId(warehouseId).stream()
+                .filter(outbound -> scope == null || hasOrderScope(outbound, scope))
                 .map(this::toListResponse)
                 .toList();
     }
 
     /** 查询指定日期范围内的出库单 */
-    public List<SalesOutboundDtos.ListResponse> findByDateRange(LocalDate startDate, LocalDate endDate) {
+    public List<SalesOutboundDtos.ListResponse> findByDateRange(LocalDate startDate, LocalDate endDate,
+                                                                  TokenStore.LoginUser user) {
+        Long scope = authorizationService.salespersonScope(user);
         return outboundMapper.selectByDateRange(startDate, endDate).stream()
+                .filter(outbound -> scope == null || hasOrderScope(outbound, scope))
                 .map(this::toListResponse)
                 .toList();
     }
@@ -330,6 +347,17 @@ public class SalesOutboundService {
             order.setShipStatus("PART_SHIPPED");
         }
         orderMapper.updateById(order);
+    }
+
+    private void requireSalespersonAccess(SalesOutbound outbound, TokenStore.LoginUser user) {
+        SalesOrder order = orderMapper.selectById(outbound.getOrderId());
+        if (order == null) throw new BusinessException("关联销售订单不存在");
+        authorizationService.requireUnrestrictedOrSalesperson(user, order.getSalespersonId());
+    }
+
+    private boolean hasOrderScope(SalesOutbound outbound, Long salespersonId) {
+        SalesOrder order = orderMapper.selectById(outbound.getOrderId());
+        return order != null && salespersonId.equals(order.getSalespersonId());
     }
 
     private SalesOutbound requireOutbound(Long id) {

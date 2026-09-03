@@ -40,16 +40,17 @@ public class SalesController {
             @RequestParam(defaultValue = "10") long size,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String customerId) {
-        return Result.ok(orderService.page(page, size, keyword, status, customerId));
+            @RequestParam(required = false) String customerId,
+            HttpServletRequest httpRequest) {
+        return Result.ok(orderService.page(page, size, keyword, status, customerId, currentUser(httpRequest)));
     }
 
     /**
      * 销售订单详情
      */
     @GetMapping("/orders/{id}")
-    public Result<SalesOrderDtos.DetailResponse> orderDetail(@PathVariable Long id) {
-        return Result.ok(orderService.detail(id));
+    public Result<SalesOrderDtos.DetailResponse> orderDetail(@PathVariable Long id, HttpServletRequest httpRequest) {
+        return Result.ok(orderService.detail(id, currentUser(httpRequest)));
     }
 
     /**
@@ -70,7 +71,7 @@ public class SalesController {
                                   HttpServletRequest httpRequest) {
         TokenStore.LoginUser user = currentUser(httpRequest);
         if ("audit".equals(request.getAction())) {
-            orderService.audit(id, user, httpRequest.getRemoteAddr());
+            orderService.audit(id, user, httpRequest.getRemoteAddr(), Boolean.TRUE.equals(request.getForceConfirm()));
         } else if ("reject".equals(request.getAction())) {
             orderService.reject(id, user, httpRequest.getRemoteAddr());
         } else {
@@ -90,16 +91,17 @@ public class SalesController {
             @RequestParam(defaultValue = "10") long size,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String customerId) {
-        return Result.ok(outboundService.page(page, size, keyword, status, customerId));
+            @RequestParam(required = false) String customerId,
+            HttpServletRequest httpRequest) {
+        return Result.ok(outboundService.page(page, size, keyword, status, customerId, currentUser(httpRequest)));
     }
 
     /**
      * 销售出库单详情
      */
     @GetMapping("/outbounds/{id}")
-    public Result<SalesOutboundDtos.DetailResponse> outboundDetail(@PathVariable Long id) {
-        return Result.ok(outboundService.detail(id));
+    public Result<SalesOutboundDtos.DetailResponse> outboundDetail(@PathVariable Long id, HttpServletRequest httpRequest) {
+        return Result.ok(outboundService.detail(id, currentUser(httpRequest)));
     }
 
     /**
@@ -165,8 +167,10 @@ public class SalesController {
     public Result<PageResult<SalesOrderDtos.ListResponse>> ordersByCustomer(
             @PathVariable Long customerId,
             @RequestParam(defaultValue = "1") long page,
-            @RequestParam(defaultValue = "10") long size) {
-        return Result.ok(orderService.page(page, size, null, null, String.valueOf(customerId)));
+            @RequestParam(defaultValue = "10") long size,
+            HttpServletRequest httpRequest) {
+        TokenStore.LoginUser user = currentUser(httpRequest);
+        return Result.ok(orderService.page(page, size, null, null, String.valueOf(customerId), user));
     }
 
     /**
@@ -174,8 +178,8 @@ public class SalesController {
      */
     @GetMapping("/orders/salesperson/{salespersonId}")
     public Result<List<SalesOrderDtos.ListResponse>> ordersBySalesperson(
-            @PathVariable Long salespersonId) {
-        return Result.ok(orderService.findBySalespersonId(salespersonId));
+            @PathVariable Long salespersonId, HttpServletRequest httpRequest) {
+        return Result.ok(orderService.findBySalespersonId(salespersonId, currentUser(httpRequest)));
     }
 
     /**
@@ -184,8 +188,8 @@ public class SalesController {
     @GetMapping("/orders/date-range")
     public Result<List<SalesOrderDtos.ListResponse>> ordersByDateRange(
             @RequestParam LocalDate startDate,
-            @RequestParam LocalDate endDate) {
-        return Result.ok(orderService.findByDateRange(startDate, endDate));
+            @RequestParam LocalDate endDate, HttpServletRequest httpRequest) {
+        return Result.ok(orderService.findByDateRange(startDate, endDate, currentUser(httpRequest)));
     }
 
     /**
@@ -193,8 +197,8 @@ public class SalesController {
      */
     @GetMapping("/outbounds/customer/{customerId}")
     public Result<List<SalesOutboundDtos.ListResponse>> outboundsByCustomer(
-            @PathVariable Long customerId) {
-        return Result.ok(outboundService.findByCustomerId(customerId));
+            @PathVariable Long customerId, HttpServletRequest httpRequest) {
+        return Result.ok(outboundService.findByCustomerId(customerId, currentUser(httpRequest)));
     }
 
     /**
@@ -202,8 +206,8 @@ public class SalesController {
      */
     @GetMapping("/outbounds/warehouse/{warehouseId}")
     public Result<List<SalesOutboundDtos.ListResponse>> outboundsByWarehouse(
-            @PathVariable Long warehouseId) {
-        return Result.ok(outboundService.findByWarehouseId(warehouseId));
+            @PathVariable Long warehouseId, HttpServletRequest httpRequest) {
+        return Result.ok(outboundService.findByWarehouseId(warehouseId, currentUser(httpRequest)));
     }
 
     /**
@@ -212,8 +216,8 @@ public class SalesController {
     @GetMapping("/outbounds/date-range")
     public Result<List<SalesOutboundDtos.ListResponse>> outboundsByDateRange(
             @RequestParam LocalDate startDate,
-            @RequestParam LocalDate endDate) {
-        return Result.ok(outboundService.findByDateRange(startDate, endDate));
+            @RequestParam LocalDate endDate, HttpServletRequest httpRequest) {
+        return Result.ok(outboundService.findByDateRange(startDate, endDate, currentUser(httpRequest)));
     }
 
     private TokenStore.LoginUser currentUser(HttpServletRequest request) {

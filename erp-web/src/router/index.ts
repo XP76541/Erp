@@ -110,6 +110,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '即时库存' },
       },
       {
+        path: 'inventory/transfers',
+        name: 'inventoryTransfers',
+        component: () => import('@/views/inventory/InventoryTransferList.vue'),
+        meta: { title: '库存调拨' },
+      },
+      {
+        path: 'inventory/checks',
+        name: 'inventoryChecks',
+        component: () => import('@/views/inventory/InventoryCheckList.vue'),
+        meta: { title: '库存盘点' },
+      },
+      {
         path: 'system/users',
         name: 'systemUsers',
         component: () => import('@/views/system/UserManagement.vue'),

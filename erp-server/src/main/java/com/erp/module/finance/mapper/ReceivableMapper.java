@@ -15,9 +15,11 @@ import java.util.List;
 @Mapper
 public interface ReceivableMapper extends BaseMapper<Receivable> {
 
-    /**
-     * 根据客户ID获取待收款的单据
-     */
+    /** 查询客户当前未核销应收余额，用于销售审核信用控制 */
+    @Select("SELECT COALESCE(SUM(remaining_amount), 0) FROM receivable " +
+            "WHERE customer_id = #{customerId} AND remaining_amount > 0")
+    BigDecimal sumOutstandingByCustomerId(@Param("customerId") Long customerId);
+
     @Select("SELECT * FROM receivable WHERE customer_id = #{customerId} AND status IN ('UNSETTLED', 'PARTIAL') ORDER BY due_date")
     List<Receivable> getUnsettledByCustomerId(@Param("customerId") Long customerId);
 

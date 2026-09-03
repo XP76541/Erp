@@ -47,6 +47,7 @@ export interface SalesOrderCreateRequest {
 export interface SalesOrderAuditRequest {
   action: 'audit' | 'reject'
   remark?: string
+  forceConfirm?: boolean
 }
 
 export interface SalesOrderListResponse {

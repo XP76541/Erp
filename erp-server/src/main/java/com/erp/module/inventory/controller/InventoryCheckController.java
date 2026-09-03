@@ -2,13 +2,13 @@ package com.erp.module.inventory.controller;
 
 import com.erp.common.Result;
 import com.erp.common.PageResult;
+import com.erp.module.system.AuthInterceptor;
 import com.erp.module.system.TokenStore;
 import com.erp.module.inventory.entity.InventoryCheck;
 import com.erp.module.inventory.service.InventoryCheckService;
 import com.erp.module.inventory.dto.InventoryCheckDtos;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 
@@ -31,7 +31,8 @@ public class InventoryCheckController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long warehouseId,
             @RequestParam(defaultValue = "1") Long page,
-            @RequestParam(defaultValue = "10") Long size) {
+            @RequestParam(defaultValue = "10") Long size,
+            HttpServletRequest httpRequest) {
 
         PageResult<InventoryCheckDtos.ListResponse> result = inventoryCheckService.page(
                 page, size, keyword, status, warehouseId);
@@ -42,7 +43,7 @@ public class InventoryCheckController {
      * 获取库存盘点单详情
      */
     @GetMapping("/{id}")
-    public Result<InventoryCheckDtos.DetailResponse> detail(@PathVariable Long id) {
+    public Result<InventoryCheckDtos.DetailResponse> detail(@PathVariable Long id, HttpServletRequest httpRequest) {
         InventoryCheckDtos.DetailResponse detail = inventoryCheckService.detail(id);
         return Result.success(detail);
     }
@@ -51,8 +52,8 @@ public class InventoryCheckController {
      * 创建库存盘点单
      */
     @PostMapping
-    public Result<Long> create(@RequestBody InventoryCheckDtos.CreateRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+    public Result<Long> create(@RequestBody InventoryCheckDtos.CreateRequest request, HttpServletRequest httpRequest) {
+        TokenStore.LoginUser currentUser = currentUser(httpRequest);
         Long checkId = inventoryCheckService.create(request, currentUser);
         return Result.success(checkId);
     }
@@ -61,9 +62,9 @@ public class InventoryCheckController {
      * 开始盘点
      */
     @PutMapping("/{id}/start-check")
-    public Result<Void> startCheck(@PathVariable Long id, @RequestBody InventoryCheckDtos.StartCheckRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        String ip = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest().getRemoteAddr();
+    public Result<Void> startCheck(@PathVariable Long id, @RequestBody InventoryCheckDtos.StartCheckRequest request, HttpServletRequest httpRequest) {
+        TokenStore.LoginUser currentUser = currentUser(httpRequest);
+        String ip = httpRequest.getRemoteAddr();
         inventoryCheckService.startCheck(id, currentUser, ip);
         return Result.success();
     }
@@ -74,9 +75,9 @@ public class InventoryCheckController {
     @PutMapping("/{id}/submit-result")
     public Result<Void> submitResult(@PathVariable Long id,
                                    @RequestBody InventoryCheckDtos.SubmitResultRequest request,
-                                   @RequestParam(required = false) String ip) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        inventoryCheckService.submitResult(id, request, currentUser, ip);
+                                   HttpServletRequest httpRequest) {
+        TokenStore.LoginUser currentUser = currentUser(httpRequest);
+        inventoryCheckService.submitResult(id, request, currentUser, httpRequest.getRemoteAddr());
         return Result.success();
     }
 
@@ -84,9 +85,9 @@ public class InventoryCheckController {
      * 审核盘点单
      */
     @PutMapping("/{id}/audit")
-    public Result<Void> audit(@PathVariable Long id, @RequestBody InventoryCheckDtos.AuditRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        String ip = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest().getRemoteAddr();
+    public Result<Void> audit(@PathVariable Long id, @RequestBody InventoryCheckDtos.AuditRequest request, HttpServletRequest httpRequest) {
+        TokenStore.LoginUser currentUser = currentUser(httpRequest);
+        String ip = httpRequest.getRemoteAddr();
         inventoryCheckService.audit(id, currentUser, ip);
         return Result.success();
     }
@@ -95,9 +96,9 @@ public class InventoryCheckController {
      * 取消盘点单
      */
     @PutMapping("/{id}/cancel")
-    public Result<Void> cancel(@PathVariable Long id, @RequestBody InventoryCheckDtos.CancelRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        String ip = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest().getRemoteAddr();
+    public Result<Void> cancel(@PathVariable Long id, @RequestBody InventoryCheckDtos.CancelRequest request, HttpServletRequest httpRequest) {
+        TokenStore.LoginUser currentUser = currentUser(httpRequest);
+        String ip = httpRequest.getRemoteAddr();
         inventoryCheckService.cancel(id, currentUser, ip);
         return Result.success();
     }
@@ -145,5 +146,9 @@ public class InventoryCheckController {
     public Result<Integer> getAuditedCount() {
         Integer count = inventoryCheckService.getStats().getAuditedCount();
         return Result.success(count);
+    }
+
+    private TokenStore.LoginUser currentUser(HttpServletRequest request) {
+        return (TokenStore.LoginUser) request.getAttribute(AuthInterceptor.ATTR_LOGIN_USER);
     }
 }
