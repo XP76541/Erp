@@ -103,6 +103,24 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/inventory/InventoryStockList.vue'),
         meta: { title: '即时库存' },
       },
+      {
+        path: 'system/users',
+        name: 'systemUsers',
+        component: () => import('@/views/system/UserManagement.vue'),
+        meta: { title: '用户管理' },
+      },
+      {
+        path: 'system/roles',
+        name: 'systemRoles',
+        component: () => import('@/views/system/RoleManagement.vue'),
+        meta: { title: '角色权限' },
+      },
+      {
+        path: 'system/logs',
+        name: 'systemLogs',
+        component: () => import('@/views/system/OperationLogList.vue'),
+        meta: { title: '操作日志' },
+      },
     ],
   },
 ]

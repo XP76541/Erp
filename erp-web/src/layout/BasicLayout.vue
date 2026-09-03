@@ -63,11 +63,14 @@
           <el-menu-item index="/inventory/stocks">即时库存</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="system" disabled>
+        <el-sub-menu index="system">
           <template #title>
             <el-icon><Setting /></el-icon>
-            <span>系统管理(开发中)</span>
+            <span>系统管理</span>
           </template>
+          <el-menu-item index="/system/users">用户管理</el-menu-item>
+          <el-menu-item index="/system/roles">角色权限</el-menu-item>
+          <el-menu-item index="/system/logs">操作日志</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>
