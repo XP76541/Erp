@@ -154,8 +154,8 @@ public class SalesController {
     public Result<Object> orderStats(HttpServletRequest httpRequest) {
         TokenStore.LoginUser user = currentUser(httpRequest);
         return Result.ok(new Object() {
-            public int draftCount = orderService.countDraftOrders();
-            public int unshippedCount = orderService.countUnshippedOrders();
+            public int draftCount = orderService.countDraftOrders(user);
+            public int unshippedCount = orderService.countUnshippedOrders(user);
         });
     }
 
@@ -166,8 +166,8 @@ public class SalesController {
     public Result<Object> outboundStats(HttpServletRequest httpRequest) {
         TokenStore.LoginUser user = currentUser(httpRequest);
         return Result.ok(new Object() {
-            public int draftCount = outboundService.countDraftOutbounds();
-            public int unpaidCount = outboundService.countUnpaidOutbounds();
+            public int draftCount = outboundService.countDraftOutbounds(user);
+            public int unpaidCount = outboundService.countUnpaidOutbounds(user);
         });
     }
 

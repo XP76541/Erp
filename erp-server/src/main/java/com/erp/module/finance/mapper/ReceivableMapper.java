@@ -59,32 +59,55 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
     List<ReceivableStatistics> getCustomerReceivableStatistics();
 
     /**
-     * 获取账龄分析数据
+     * 获取账龄分析数据（截止日期由调用方明确传入，避免历史查询依赖服务器当前日期）。
      */
-    @Select("SELECT CASE " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) < 0 THEN '未到期' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 0 AND 30 THEN '1-30天' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 31 AND 60 THEN '31-60天' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 61 AND 90 THEN '61-90天' " +
-            "   ELSE '90天以上' END as aging_bucket, " +
-            "SUM(amount) as total_amount, SUM(received_amount) as total_paid, " +
-            "SUM(amount - received_amount) as total_remaining " +
-            "FROM receivable GROUP BY CASE " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) < 0 THEN '未到期' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 0 AND 30 THEN '1-30天' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 31 AND 60 THEN '31-60天' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 61 AND 90 THEN '61-90天' " +
-            "   ELSE '90天以上' END")
-    List<AgingAnalysis> getAgingAnalysis();
+    @Select({"<script>",
+            "SELECT CASE ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) &lt; 0 THEN '未到期' ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) BETWEEN 0 AND 30 THEN '1-30天' ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) BETWEEN 31 AND 60 THEN '31-60天' ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) BETWEEN 61 AND 90 THEN '61-90天' ",
+            "   ELSE '90天以上' END as aging_bucket, ",
+            "SUM(amount) as total_amount, SUM(received_amount) as total_paid, ",
+            "SUM(remaining_amount) as total_remaining ",
+            "FROM receivable ",
+            "WHERE remaining_amount > 0 ",
+            "<if test='customerIds != null and customerIds.size() > 0'>",
+            "AND customer_id IN ",
+            "<foreach collection='customerIds' item='customerId' open='(' separator=',' close=')'>#{customerId}</foreach>",
+            "</if>",
+            "GROUP BY CASE ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) &lt; 0 THEN '未到期' ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) BETWEEN 0 AND 30 THEN '1-30天' ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) BETWEEN 31 AND 60 THEN '31-60天' ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) BETWEEN 61 AND 90 THEN '61-90天' ",
+            "   ELSE '90天以上' END",
+            "</script>"})
+    List<AgingAnalysis> getAgingAnalysis(@Param("cutoffDate") LocalDate cutoffDate,
+                                         @Param("customerIds") List<Long> customerIds);
 
-    /**
-     * 获取超期应收账款
-     */
-    @Select("SELECT *, DATEDIFF(day, due_date, CAST(GETDATE() AS date)) as days_overdue " +
-            "FROM receivable " +
-            "WHERE due_date < CAST(GETDATE() AS date) AND remaining_amount > 0 " +
-            "ORDER BY days_overdue DESC")
-    List<Receivable> getOverdueReceivables();
+    /** 兼容旧调用，默认使用当天且不限制客户范围。 */
+    default List<AgingAnalysis> getAgingAnalysis() {
+        return getAgingAnalysis(LocalDate.now(), null);
+    }
+
+    /** 获取截止日期前的逾期应收账款。 */
+    @Select({"<script>",
+            "SELECT * FROM receivable ",
+            "WHERE due_date &lt; #{cutoffDate} AND remaining_amount > 0 ",
+            "<if test='customerIds != null and customerIds.size() > 0'>",
+            "AND customer_id IN ",
+            "<foreach collection='customerIds' item='customerId' open='(' separator=',' close=')'>#{customerId}</foreach>",
+            "</if>",
+            "ORDER BY DATEDIFF(day, due_date, #{cutoffDate}) DESC",
+            "</script>"})
+    List<Receivable> getOverdueReceivables(@Param("cutoffDate") LocalDate cutoffDate,
+                                           @Param("customerIds") List<Long> customerIds);
+
+    /** 兼容旧调用，默认使用当天且不限制客户范围。 */
+    default List<Receivable> getOverdueReceivables() {
+        return getOverdueReceivables(LocalDate.now(), null);
+    }
 
     @Data
     static class ReceivableStatistics {

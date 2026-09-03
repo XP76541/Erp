@@ -190,6 +190,16 @@ public class SalesOrderService {
                 throw new BusinessException("商品低于最低限价，需老板确认");
             }
         }
+        SalesOrderDtos.CreditStatus credit = creditStatus(existing.getCustomerId(), totalAmount(items), user);
+        // 信用额度一期只预警不阻止审核，但审核时重新计算并记录结果，避免使用过期页面数据。
+        String lowPriceLines = items.stream()
+                .filter(item -> {
+                    Product product = productMapper.selectById(item.getProductId());
+                    BigDecimal minimum = product == null || product.getMinSalePrice() == null ? BigDecimal.ZERO : product.getMinSalePrice();
+                    return minimum.compareTo(BigDecimal.ZERO) > 0 && item.getPrice().compareTo(minimum) < 0;
+                })
+                .map(item -> String.valueOf(item.getLineNo()))
+                .collect(java.util.stream.Collectors.joining(","));
         // ② 抢占状态机:并发双击审核只有一次生效,失败者读到已审状态报错回滚
         if (orderMapper.claimAudit(id, user.userId()) == 0) {
             throw new BusinessException("单据不存在或不是草稿状态,无法审核");
@@ -197,7 +207,8 @@ public class SalesOrderService {
         SalesOrder doc = requireDoc(id);
         authorizationService.requireUnrestrictedOrSalesperson(user, doc.getSalespersonId());
 
-        String detail = "{\"amount\":" + totalAmount(items) + ",\"lines\":" + items.size() + "}";
+        String detail = "{\"amount\":" + totalAmount(items) + ",\"lines\":" + items.size() + ",\"forceConfirm\":" + forceConfirm
+                + ",\"lowPriceLines\":\"" + lowPriceLines + "\",\"creditExceeded\":" + credit.getExceeded() + "}";
         operationLogService.record(user, "sales_order", "AUDIT",
                 "SO", id, doc.getDocNo(), detail, ip);
     }
@@ -264,12 +275,22 @@ public class SalesOrderService {
 
     /** 查询待审核的销售订单数量 */
     public int countDraftOrders() {
-        return orderMapper.countDraftOrders();
+        return countDraftOrders(null);
+    }
+
+    public int countDraftOrders(TokenStore.LoginUser user) {
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        return scope == null ? orderMapper.countDraftOrders() : orderMapper.countDraftOrdersBySalesperson(scope);
     }
 
     /** 查询已审核未发货的销售订单数量 */
     public int countUnshippedOrders() {
-        return orderMapper.countUnshippedOrders();
+        return countUnshippedOrders(null);
+    }
+
+    public int countUnshippedOrders(TokenStore.LoginUser user) {
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        return scope == null ? orderMapper.countUnshippedOrders() : orderMapper.countUnshippedOrdersBySalesperson(scope);
     }
 
     private BigDecimal totalAmount(List<SalesOrderItem> items) {

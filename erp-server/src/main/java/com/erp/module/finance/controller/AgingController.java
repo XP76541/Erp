@@ -4,9 +4,11 @@ import com.erp.common.Result;
 import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.finance.service.ReceivableService;
 import com.erp.module.finance.service.AgingUpdateService;
+import com.erp.module.system.TokenStore;
 import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * 账龄管理Controller
@@ -50,8 +52,10 @@ public class AgingController {
      * 获取账龄分析数据
      */
     @GetMapping("/analysis")
-    public Result<java.util.List<ReceivableDtos.AgingAnalysisResponse>> getAgingAnalysis() {
-        return Result.ok(receivableService.getAgingAnalysis());
+    public Result<java.util.List<ReceivableDtos.AgingAnalysisResponse>> getAgingAnalysis(
+            @RequestParam(required = false) String cutoffDate) {
+        LocalDate cutoff = cutoffDate == null ? LocalDate.now() : LocalDate.parse(cutoffDate);
+        return Result.ok(receivableService.getAgingAnalysis(cutoff, TokenStore.getCurrentLoginUser()));
     }
 
     /**

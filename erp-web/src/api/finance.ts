@@ -64,8 +64,8 @@ export const financeApi = {
   auditPayment: (id: number, data: PaymentAuditRequest) => request.put<void>(`/finance/payments/${id}/audit`, data),
   // 客户应收旧页面兼容接口，供应商付款不复用这些字段
   getReceivables: (params: Record<string, unknown>) => request.get('/finance/receivables', { params }),
-  getAgingAnalysis: () => request.get('/finance/receivables/aging-analysis'),
-  getOverdueReceivables: () => request.get('/finance/receivables/overdue'),
+  getAgingAnalysis: (cutoffDate?: string) => request.get<AgingAnalysisResponse[]>('/finance/receivables/aging-analysis', { params: { cutoffDate } }),
+  getOverdueReceivables: (cutoffDate?: string) => request.get<ReceivableListResponse[]>('/finance/receivables/overdue', { params: { cutoffDate } }),
   getReceivableStats: () => request.get('/finance/receivables/statistics'),
   settleReceivables: (data: { settlements: Array<{ receivableId: number; amount: number; paymentMethod?: string; remark?: string }> }) =>
     request.post<void>('/finance/receivables/batch-settle', data),

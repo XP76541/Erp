@@ -57,12 +57,20 @@ public interface SalesOutboundMapper extends BaseMapper<SalesOutbound> {
     @Select("SELECT COUNT(*) FROM sales_outbound WHERE status = 'DRAFT'")
     int countDraftOutbounds();
 
+    @Select("SELECT COUNT(*) FROM sales_outbound o JOIN sales_order s ON s.id = o.order_id WHERE o.status = 'DRAFT' AND s.salesperson_id = #{salespersonId}")
+    int countDraftOutboundsBySalesperson(@Param("salespersonId") Long salespersonId);
+
     /**
      * 查询已审核未收款的数量
      */
     @Select("SELECT COUNT(*) FROM sales_outbound WHERE status = 'AUDITED' AND " +
             "id NOT IN (SELECT outbound_id FROM receipt_allocation)")
     int countUnpaidOutbounds();
+
+    @Select("SELECT COUNT(*) FROM sales_outbound o JOIN sales_order s ON s.id = o.order_id " +
+            "WHERE o.status = 'AUDITED' AND o.id NOT IN (SELECT outbound_id FROM receipt_allocation) " +
+            "AND s.salesperson_id = #{salespersonId}")
+    int countUnpaidOutboundsBySalesperson(@Param("salespersonId") Long salespersonId);
 
     /** 状态机抢占:DRAFT→AUDITED 原子迁移,返回 0 表示已被审或不存在 */
     @Update("UPDATE sales_outbound SET status = 'AUDITED', audit_by = #{userId}, audit_at = SYSDATETIME() " +

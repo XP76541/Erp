@@ -51,11 +51,17 @@ public interface SalesOrderMapper extends BaseMapper<SalesOrder> {
     @Select("SELECT COUNT(*) FROM sales_order WHERE status = 'DRAFT'")
     int countDraftOrders();
 
+    @Select("SELECT COUNT(*) FROM sales_order WHERE status = 'DRAFT' AND salesperson_id = #{salespersonId}")
+    int countDraftOrdersBySalesperson(@Param("salespersonId") Long salespersonId);
+
     /**
      * 查询已审核未发货的销售订单数量
      */
     @Select("SELECT COUNT(*) FROM sales_order WHERE status = 'AUDITED' AND ship_status = 'UN_SHIPPED'")
     int countUnshippedOrders();
+
+    @Select("SELECT COUNT(*) FROM sales_order WHERE status = 'AUDITED' AND ship_status = 'UN_SHIPPED' AND salesperson_id = #{salespersonId}")
+    int countUnshippedOrdersBySalesperson(@Param("salespersonId") Long salespersonId);
 
     /** 状态机抢占:DRAFT→AUDITED 原子迁移,返回 0 表示已被审或不存在 */
     @Update("UPDATE sales_order SET status = 'AUDITED', audit_by = #{userId}, audit_at = SYSDATETIME() " +

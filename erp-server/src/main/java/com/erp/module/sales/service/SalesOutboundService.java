@@ -335,12 +335,24 @@ public class SalesOutboundService {
 
     /** 查询待审核的出库单数量 */
     public int countDraftOutbounds() {
-        return outboundMapper.countDraftOutbounds();
+        return countDraftOutbounds(null);
+    }
+
+    public int countDraftOutbounds(TokenStore.LoginUser user) {
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        return scope == null ? outboundMapper.countDraftOutbounds() : outboundMapper.countDraftOutboundsBySalesperson(scope);
     }
 
     /** 查询已审核未收款的数量 */
     public int countUnpaidOutbounds() {
-        return outboundMapper.countUnpaidOutbounds();
+        return countUnpaidOutbounds(null);
+    }
+
+    public int countUnpaidOutbounds(TokenStore.LoginUser user) {
+        // 未收款统计需要沿销售订单业务员范围过滤，避免销售员看到全量数据。
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        if (scope == null) return outboundMapper.countUnpaidOutbounds();
+        return outboundMapper.countUnpaidOutboundsBySalesperson(scope);
     }
 
     /** 更新订单发货状态 */
