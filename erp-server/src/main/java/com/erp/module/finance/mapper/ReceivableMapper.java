@@ -17,7 +17,8 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
 
     /** 查询客户当前未核销应收余额，用于销售审核信用控制 */
     @Select("SELECT COALESCE(SUM(remaining_amount), 0) FROM receivable " +
-            "WHERE customer_id = #{customerId} AND remaining_amount > 0")
+            "WHERE customer_id = #{customerId} AND status IN ('UNSETTLED', 'PARTIAL') " +
+            "AND remaining_amount > 0")
     BigDecimal sumOutstandingByCustomerId(@Param("customerId") Long customerId);
 
     @Select("SELECT * FROM receivable WHERE customer_id = #{customerId} AND status IN ('UNSETTLED', 'PARTIAL') ORDER BY due_date")

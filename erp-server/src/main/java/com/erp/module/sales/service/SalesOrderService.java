@@ -72,6 +72,24 @@ public class SalesOrderService {
         this.authorizationService = authorizationService;
     }
 
+    /** 查询客户信用额度状态；额度为0表示不限额。 */
+    public SalesOrderDtos.CreditStatus creditStatus(Long customerId, BigDecimal orderAmount, TokenStore.LoginUser user) {
+        Customer customer = customerMapper.selectById(customerId);
+        if (customer == null || customer.getIsActive() == 0) {
+            throw new BusinessException("客户不存在或已停用");
+        }
+        authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
+        BigDecimal limit = customer.getCreditLimit() == null ? BigDecimal.ZERO : customer.getCreditLimit();
+        BigDecimal outstanding = receivableMapper.sumOutstandingByCustomerId(customerId);
+        if (outstanding == null) outstanding = BigDecimal.ZERO;
+        BigDecimal requested = orderAmount == null ? BigDecimal.ZERO : orderAmount.max(BigDecimal.ZERO);
+        boolean unlimited = limit.compareTo(BigDecimal.ZERO) == 0;
+        BigDecimal available = unlimited ? BigDecimal.ZERO : limit.subtract(outstanding.add(requested)).max(BigDecimal.ZERO);
+        boolean exceeded = !unlimited && outstanding.add(requested).compareTo(limit) > 0;
+        String warning = exceeded ? "订单金额加未核销应收已超过客户信用额度" : (unlimited ? "客户未设置信用额度" : "信用额度充足");
+        return new SalesOrderDtos.CreditStatus(customerId, limit, outstanding, available, exceeded, warning);
+    }
+
     /** 分页列表:按单号/客户/状态过滤 */
     public PageResult<SalesOrderDtos.ListResponse> page(long page, long size, String keyword, String status, String customerId,
                                                         TokenStore.LoginUser user) {

@@ -15,6 +15,7 @@ import com.erp.module.sales.entity.SalesOutbound;
 import com.erp.module.sales.entity.SalesOutboundItem;
 import com.erp.module.sales.mapper.SalesOutboundMapper;
 import com.erp.module.sales.mapper.SalesOutboundItemMapper;
+import com.erp.module.sales.mapper.SalesOrderMapper;
 import com.erp.module.finance.entity.Payable;
 import com.erp.module.finance.mapper.PayableMapper;
 import com.erp.module.finance.entity.Receivable;
@@ -41,6 +42,7 @@ public class ReportService {
 
     private final SalesOutboundMapper outboundMapper;
     private final SalesOutboundItemMapper outboundItemMapper;
+    private final SalesOrderMapper salesOrderMapper;
     private final PurchaseInboundMapper purchaseInboundMapper;
     private final PurchaseInboundItemMapper purchaseInboundItemMapper;
     private final ReceivableMapper receivableMapper;
@@ -79,6 +81,8 @@ public class ReportService {
 
             List<SalesOutbound> dayOutbounds = dateGroup.get(date).stream()
                     .filter(outbound -> request.getCustomerId() == null || request.getCustomerId().equals(outbound.getCustomerId()))
+                    .filter(outbound -> request.getSalespersonId() == null || hasSalesperson(outbound, request.getSalespersonId()))
+                    .filter(outbound -> "AUDITED".equals(outbound.getStatus()))
                     .toList();
             Long totalOrders = (long) dayOutbounds.size();
 
@@ -255,9 +259,11 @@ public class ReportService {
         return response;
     }
 
-    /**
-     * 获取指定仓库的库存
-     */
+    private boolean hasSalesperson(SalesOutbound outbound, Long salespersonId) {
+        var order = salesOrderMapper.selectById(outbound.getOrderId());
+        return order != null && salespersonId.equals(order.getSalespersonId());
+    }
+
     private Map<Long, BigDecimal> getStocksByWarehouse(Long warehouseId, LocalDate date) {
         return inventoryService.getWarehouseStocks(warehouseId);
     }

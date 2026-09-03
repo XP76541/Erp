@@ -29,6 +29,17 @@ public class SalesController {
     private final SalesOrderService orderService;
     private final SalesOutboundService outboundService;
 
+    /**
+     * 查询客户信用额度状态（服务端重新计算，供创建订单前预警）
+     */
+    @GetMapping("/customers/{customerId}/credit-status")
+    public Result<SalesOrderDtos.CreditStatus> creditStatus(
+            @PathVariable Long customerId,
+            @RequestParam(required = false) java.math.BigDecimal orderAmount,
+            HttpServletRequest httpRequest) {
+        return Result.ok(orderService.creditStatus(customerId, orderAmount, currentUser(httpRequest)));
+    }
+
     // ===== 销售订单 =====
 
     /**

@@ -139,6 +139,12 @@ export interface SalesOutboundCreateFromOrderResponse {
 
 // API 请求方法
 export const salesApi = {
+  getCustomerCreditStatus: (customerId: number, orderAmount?: number) => {
+    return request.get(`/sales/customers/${customerId}/credit-status`, {
+      params: { orderAmount }
+    })
+  },
+
   // 销售订单
   getOrders: (params: {
     page?: number

@@ -121,6 +121,19 @@ public class SalesOutboundService {
         }
         authorizationService.requireUnrestrictedOrSalesperson(user, order.getSalespersonId());
 
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new BusinessException("发货明细不能为空");
+        }
+        java.util.Set<Long> orderItemIds = new java.util.HashSet<>();
+        for (ItemInput input : request.getItems()) {
+            if (input.getOrderItemId() == null || input.getQty() == null || input.getQty().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException("发货明细的商品和数量必须有效");
+            }
+            if (!orderItemIds.add(input.getOrderItemId())) {
+                throw new BusinessException("发货明细不能重复");
+            }
+        }
+
         Customer customer = customerMapper.selectById(order.getCustomerId());
         if (customer == null || customer.getIsActive() == 0) {
             throw new BusinessException("客户不存在或已停用");
@@ -203,6 +216,9 @@ public class SalesOutboundService {
      */
     @Transactional
     public void audit(Long id, TokenStore.LoginUser user, String ip) {
+        SalesOutbound existing = requireOutbound(id);
+        requireSalespersonAccess(existing, user);
+
         // ① 抢占状态机:并发双击审核只有一次生效,失败者读到已审状态报错回滚
         if (outboundMapper.claimAudit(id, user.userId()) == 0) {
             throw new BusinessException("单据不存在或不是草稿状态,无法审核");
@@ -213,8 +229,10 @@ public class SalesOutboundService {
         // ② 库存出库:调用 InventoryService.stockOut
         List<SalesOutboundItem> items = outboundItemMapper.selectByOutboundId(id);
         for (SalesOutboundItem item : items) {
-            // 更新订单发货数量
-            orderItemMapper.updateShippedQty(item.getOrderItemId(), item.getLineNo(), item.getQty());
+            // 更新订单发货数量，按订单明细主键原子累加并再次校验剩余数量
+            if (orderItemMapper.updateShippedQty(item.getOrderItemId(), item.getQty()) == 0) {
+                throw new BusinessException("发货数量超过订单剩余数量");
+            }
 
             // 库存出库
             inventoryService.stockOut("SALES_OUT", outbound.getId(), outbound.getDocNo(),
@@ -264,6 +282,9 @@ public class SalesOutboundService {
      */
     @Transactional
     public void reject(Long id, TokenStore.LoginUser user, String ip) {
+        SalesOutbound existing = requireOutbound(id);
+        requireSalespersonAccess(existing, user);
+
         // ① 抢占状态机:并发双击驳回只有一次生效
         if (outboundMapper.claimReject(id, user.userId()) == 0) {
             throw new BusinessException("单据不存在或不是草稿状态,无法驳回");

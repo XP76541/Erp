@@ -37,6 +37,20 @@ public class SystemAuthorizationService {
         if (!hasRole(user, "ADMIN")) throw new BusinessException(403, "无系统管理权限");
     }
 
+    /** 报表查询和导出权限；销售员只允许查看本人范围，财务/管理角色可查看完整报表。 */
+    public void requireReportAccess(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS")
+                && !hasRole(user, "FINANCE") && !hasRole(user, "SALES")) {
+            throw new BusinessException(403, "无报表查看权限");
+        }
+    }
+
+    /** 销售员只能查看本人业务员维度；其他报表角色可按请求筛选。 */
+    public Long reportSalespersonScope(TokenStore.LoginUser user) {
+        requireReportAccess(user);
+        return salespersonScope(user);
+    }
+
     /**
      * 返回当前用户的角色编码。每次从数据库解析，避免登录快照中的角色过期。
      */

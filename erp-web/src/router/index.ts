@@ -86,6 +86,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '销售出库单' },
       },
       {
+        path: 'finance/reports',
+        name: 'reportOverview',
+        component: () => import('@/views/finance/ReportOverview.vue'),
+        meta: { title: '经营报表' },
+      },
+      {
         path: 'finance/aging-report',
         name: 'agingReport',
         component: () => import('@/views/finance/AgingReport.vue'),

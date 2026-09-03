@@ -53,6 +53,7 @@
           <el-menu-item index="/finance/payments">供应商付款</el-menu-item>
           <el-menu-item index="/finance/receivables">应收核销</el-menu-item>
           <el-menu-item index="/finance/aging-report">应收账龄</el-menu-item>
+          <el-menu-item index="/finance/reports">经营报表</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="inventory">

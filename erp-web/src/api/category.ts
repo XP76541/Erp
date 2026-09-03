@@ -1,5 +1,4 @@
 import http from './http'
-import type { PageResult } from './http'
 
 export interface ProductCategory {
   id?: number

@@ -53,8 +53,8 @@ public interface SalesOrderItemMapper extends BaseMapper<SalesOrderItem> {
      * 更新发货数量
      */
     @Update("UPDATE sales_order_item SET shipped_qty = shipped_qty + #{shippedQty} " +
-            "WHERE order_id = #{orderId} AND line_no = #{lineNo}")
-    int updateShippedQty(@Param("orderId") Long orderId, @Param("lineNo") Integer lineNo, @Param("shippedQty") BigDecimal shippedQty);
+            "WHERE id = #{orderItemId} AND shipped_qty + #{shippedQty} <= qty")
+    int updateShippedQty(@Param("orderItemId") Long orderItemId, @Param("shippedQty") BigDecimal shippedQty);
 
     /**
      * 查询指定订单明细已发货的数量
