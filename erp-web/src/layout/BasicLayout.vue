@@ -26,11 +26,13 @@
           <el-menu-item index="/masterdata/suppliers">供应商档案</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="sales" disabled>
+        <el-sub-menu index="sales">
           <template #title>
             <el-icon><SoldOut /></el-icon>
-            <span>销售管理(开发中)</span>
+            <span>销售管理</span>
           </template>
+          <el-menu-item index="/sales/orders">销售订单</el-menu-item>
+          <el-menu-item index="/sales/outbounds">销售出库单</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="purchase">
@@ -48,15 +50,17 @@
             <span>财务管理</span>
           </template>
           <el-menu-item index="/finance/payables">应付账款</el-menu-item>
-          <el-menu-item index="/finance/payables">应付账款</el-menu-item>
           <el-menu-item index="/finance/payments">供应商付款</el-menu-item>
+          <el-menu-item index="/finance/receivables">应收核销</el-menu-item>
+          <el-menu-item index="/finance/aging-report">应收账龄</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="inventory" disabled>
+        <el-sub-menu index="inventory">
           <template #title>
             <el-icon><Box /></el-icon>
-            <span>库存管理(开发中)</span>
+            <span>库存管理</span>
           </template>
+          <el-menu-item index="/inventory/stocks">即时库存</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="system" disabled>

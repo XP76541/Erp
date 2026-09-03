@@ -138,7 +138,7 @@ public class ReceivableService {
             throw new BusinessException("应收账款记录不存在");
         }
 
-        if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+        if (request.getAmount() == null || request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("核销金额必须大于0");
         }
 

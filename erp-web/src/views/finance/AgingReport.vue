@@ -194,57 +194,7 @@ function generateCustomerAgingData() {
 }
 
 function renderChart() {
-  const chartDom = agingChartRef.value
-  if (!chartDom) return
-
-  // 清除之前的图表
-  if (chartInstance.value) {
-    chartInstance.value.dispose()
-  }
-
-  // 使用 ECharts 渲染图表
-  const myChart = echarts.init(chartDom)
-  chartInstance.value = myChart
-
-  const option = {
-    title: {
-      text: '应收账款账龄分布',
-      left: 'center'
-    },
-    tooltip: {
-      trigger: 'item',
-      formatter: '{a} <br/>{b}: {c} ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      left: 'left'
-    },
-    series: [
-      {
-        name: '账龄分布',
-        type: 'pie',
-        radius: '50%',
-        data: agingData.value.map(item => ({
-          value: item.totalRemaining,
-          name: item.agingBucket
-        })),
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        }
-      }
-    ]
-  }
-
-  myChart.setOption(option)
-
-  // 响应式调整
-  window.addEventListener('resize', () => {
-    myChart.resize()
-  })
+  // 当前项目未引入图表组件，账龄数据通过下方明细表展示
 }
 
 function getAgingPercentage(row: any) {

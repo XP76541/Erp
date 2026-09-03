@@ -309,9 +309,8 @@ async function refreshAging() {
 
 async function createCollection(row: ReceivableListResponse) {
   // 加载客户待收款明细
-  const receivables = await financeApi.getReceivablesByCustomer(row.customerId)
-
-  // 初始化收款表单
+  const data = await financeApi.getReceivablesByCustomer(row.customerId)
+  const receivables = data.records.filter(r => r.status === 'UNSETTLED' || r.status === 'PARTIAL')
   collectionForm.businessDate = new Date().toISOString().slice(0, 10)
   collectionForm.amount = 0
   collectionForm.remark = ''
@@ -340,15 +339,12 @@ async function handleCreateCollection() {
 
   creating.value = true
   try {
-    await financeApi.createPayment({
-      customerId: collectionForm.allocations[0].receivableId,
-      businessDate: collectionForm.businessDate,
-      amount: collectionForm.amount,
-      paymentMethod: collectionForm.paymentMethod,
-      remark: collectionForm.remark,
-      allocations: collectionForm.allocations.map(a => ({
+    await financeApi.settleReceivables({
+      settlements: collectionForm.allocations.filter(a => a.allocatedAmount > 0).map(a => ({
         receivableId: a.receivableId,
-        allocatedAmount: a.allocatedAmount
+        amount: a.allocatedAmount,
+        paymentMethod: collectionForm.paymentMethod,
+        remark: collectionForm.remark
       }))
     })
     ElMessage.success('收款单创建成功')

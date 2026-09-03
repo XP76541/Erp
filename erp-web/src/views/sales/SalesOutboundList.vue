@@ -217,7 +217,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { salesApi } from '@/api/sales'
-import type { SalesOutbound, SalesOutboundListResponse, SalesOutboundCreateRequest } from '@/api/sales'
+import type { SalesOutbound, SalesOutboundListResponse, SalesOutboundCreateRequest, SalesOrderListResponse } from '@/api/sales'
 import { customerApi } from '@/api/customer'
 import type { Customer } from '@/api/customer'
 import { warehouseApi } from '@/api/warehouse'
@@ -435,8 +435,8 @@ function addOutboundItem() {
 async function handleCreateOutbound() {
   const valid = await outboundFormRef.value?.validate().catch(() => false)
   if (!valid) return
-  if (!outboundForm.items.length || outboundForm.items.some((i) => !i.productId)) {
-    ElMessage.warning('请为每一行选择商品')
+  if (!outboundForm.items.length || outboundForm.items.some((i) => !i.productId || i.qty <= 0)) {
+    ElMessage.warning('请填写有效的发货商品和数量')
     return
   }
 

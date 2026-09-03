@@ -97,6 +97,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/ReceivableList.vue'),
         meta: { title: '应收核销' },
       },
+      {
+        path: 'inventory/stocks',
+        name: 'inventoryStocks',
+        component: () => import('@/views/inventory/InventoryStockList.vue'),
+        meta: { title: '即时库存' },
+      },
     ],
   },
 ]

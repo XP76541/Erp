@@ -1,6 +1,30 @@
 import request from '@/utils/request'
 import type { PageResult } from './http'
 
+export interface AgingAnalysisResponse {
+  agingBucket: string
+  totalAmount: number
+  totalPaid: number
+  totalRemaining: number
+}
+
+export interface ReceivableListResponse {
+  id: number
+  docNo: string
+  orderDocNo?: string
+  customerId: number
+  customerName?: string
+  businessDate: string
+  dueDate: string
+  amount: number
+  paidAmount: number
+  remainingAmount: number
+  status: string
+  daysOverdue?: number
+  agingBucket?: string
+  createdAt?: string
+}
+
 export interface Payment {
   id: number
   docNo: string
@@ -43,5 +67,7 @@ export const financeApi = {
   getAgingAnalysis: () => request.get('/finance/receivables/aging-analysis'),
   getOverdueReceivables: () => request.get('/finance/receivables/overdue'),
   getReceivableStats: () => request.get('/finance/receivables/statistics'),
-  getReceivablesByCustomer: (customerId: number) => request.get(`/finance/payments/receivables/${customerId}`),
+  settleReceivables: (data: { settlements: Array<{ receivableId: number; amount: number; paymentMethod?: string; remark?: string }> }) =>
+    request.post<void>('/finance/receivables/batch-settle', data),
+  getReceivablesByCustomer: (customerId: number) => request.get<{ records: ReceivableListResponse[]; total: number }>('/finance/receivables', { params: { customerId, page: 1, size: 500 } }),
 }

@@ -68,6 +68,7 @@ public class ReceivableController {
     @PostMapping("/{id}/settle")
     public Result<ReceivableDtos.SettleResponse> settle(@PathVariable Long id,
                                                       @RequestBody ReceivableDtos.SettleRequest request) {
+        request.setReceivableId(id);
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
         ReceivableDtos.SettleResponse response = receivableService.settleReceivable(request, currentUser);
         return Result.success(response);
