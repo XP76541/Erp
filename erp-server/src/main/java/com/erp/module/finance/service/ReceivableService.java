@@ -168,8 +168,10 @@ public class ReceivableService {
 
         allocationMapper.insert(allocation);
 
-        // 更新应收账款
-        receivableMapper.updatePaidAmount(receivable.getId(), request.getAmount());
+        int updated = receivableMapper.updatePaidAmount(receivable.getId(), request.getAmount());
+        if (updated != 1) {
+            throw new BusinessException("应收账款已被其他收款更新，请刷新后重试");
+        }
 
         // 更新收款单状态
         payment.setAllocatedAmount(request.getAmount());

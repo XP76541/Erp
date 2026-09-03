@@ -8,10 +8,15 @@ import com.erp.module.masterdata.entity.Warehouse;
 import com.erp.module.masterdata.mapper.CustomerMapper;
 import com.erp.module.masterdata.mapper.ProductMapper;
 import com.erp.module.masterdata.mapper.WarehouseMapper;
+import com.erp.module.purchase.entity.PurchaseInbound;
+import com.erp.module.purchase.mapper.PurchaseInboundItemMapper;
+import com.erp.module.purchase.mapper.PurchaseInboundMapper;
 import com.erp.module.sales.entity.SalesOutbound;
 import com.erp.module.sales.entity.SalesOutboundItem;
 import com.erp.module.sales.mapper.SalesOutboundMapper;
 import com.erp.module.sales.mapper.SalesOutboundItemMapper;
+import com.erp.module.finance.entity.Payable;
+import com.erp.module.finance.mapper.PayableMapper;
 import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.mapper.ReceivableMapper;
 import com.erp.module.finance.dto.ReportDtos;
@@ -36,7 +41,10 @@ public class ReportService {
 
     private final SalesOutboundMapper outboundMapper;
     private final SalesOutboundItemMapper outboundItemMapper;
+    private final PurchaseInboundMapper purchaseInboundMapper;
+    private final PurchaseInboundItemMapper purchaseInboundItemMapper;
     private final ReceivableMapper receivableMapper;
+    private final PayableMapper payableMapper;
     private final CustomerMapper customerMapper;
     private final ProductMapper productMapper;
     private final WarehouseMapper warehouseMapper;
@@ -207,7 +215,13 @@ public class ReportService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算采购额（从采购入库单统计，这里需要添加相应的查询）
-        BigDecimal totalPurchases = BigDecimal.ZERO; // TODO: 实现采购金额统计
+        BigDecimal totalPurchases = purchaseInboundMapper.selectByDateRange(startDate.toString(), endDate.toString()).stream()
+                .filter(doc -> "AUDITED".equals(doc.getStatus()))
+                .flatMap(doc -> purchaseInboundItemMapper.selectList(Wrappers.<com.erp.module.purchase.entity.PurchaseInboundItem>lambdaQuery()
+                        .eq(com.erp.module.purchase.entity.PurchaseInboundItem::getInboundId, doc.getId())).stream())
+                .map(com.erp.module.purchase.entity.PurchaseInboundItem::getAmount)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算应收账款余额
         BigDecimal totalReceivables = receivableMapper.selectList(Wrappers.<Receivable>lambdaQuery()
@@ -218,7 +232,12 @@ public class ReportService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算应付账款余额
-        BigDecimal totalPayables = BigDecimal.ZERO; // TODO: 实现应付金额统计
+        BigDecimal totalPayables = payableMapper.selectList(Wrappers.<Payable>lambdaQuery()
+                        .ne(Payable::getStatus, "SETTLED")
+                        .between(Payable::getBizDate, startDate, endDate))
+                .stream().map(Payable::getPaidAmount)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算库存总值
         BigDecimal totalInventory = getInventoryTotalValue(endDate);

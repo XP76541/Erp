@@ -149,7 +149,7 @@ public class CollectionService {
                 Wrappers.<Receivable>lambdaQuery()
                         .gt(Receivable::getDaysOverdue, 30)
                         .eq(Receivable::getStatus, "UNSETTLED")
-                        .le(Receivable::getRemainingAmount, new BigDecimal("0.01"))
+                        .gt(Receivable::getRemainingAmount, new BigDecimal("0.01"))
         );
 
         // 过滤掉最近30天内有催收记录的单据

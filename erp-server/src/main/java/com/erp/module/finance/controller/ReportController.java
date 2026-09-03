@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import java.util.List;
+import java.nio.charset.StandardCharsets;
+import jakarta.servlet.http.HttpServletResponse;
 
 @RestController
 @RequestMapping("/finance/reports")

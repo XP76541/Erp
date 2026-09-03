@@ -30,14 +30,14 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
     /**
      * 更新付款金额和状态
      */
-    @Update("UPDATE receivable SET paid_amount = paid_amount + #{amount}, " +
-            "remaining_amount = amount - paid_amount, " +
+    @Update("UPDATE receivable SET received_amount = received_amount + #{amount}, " +
+            "remaining_amount = amount - (received_amount + #{amount}), " +
             "status = CASE " +
-            "   WHEN remaining_amount = 0 THEN 'SETTLED' " +
-            "   WHEN remaining_amount < amount THEN 'PARTIAL' " +
-            "   ELSE status " +
+            "   WHEN amount - (received_amount + #{amount}) <= 0 THEN 'SETTLED' " +
+            "   WHEN received_amount + #{amount} > 0 THEN 'PARTIAL' " +
+            "   ELSE 'UNSETTLED' " +
             "END " +
-            "WHERE id = #{id}")
+            "WHERE id = #{id} AND amount - received_amount >= #{amount}")
     int updatePaidAmount(@Param("id") Long id, @Param("amount") BigDecimal amount);
 
     /**
@@ -58,27 +58,28 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
     /**
      * 获取账龄分析数据
      */
-    @Select("SELECT " +
-            "CASE " +
-            "   WHEN DATEDIFF(CURRENT_DATE(), due_date) < 0 THEN '未到期' " +
-            "   WHEN DATEDIFF(CURRENT_DATE(), due_date) BETWEEN 0 AND 30 THEN '1-30天' " +
-            "   WHEN DATEDIFF(CURRENT_DATE(), due_date) BETWEEN 31 AND 60 THEN '31-60天' " +
-            "   WHEN DATEDIFF(CURRENT_DATE(), due_date) BETWEEN 61 AND 90 THEN '61-90天' " +
-            "   ELSE '90天以上' " +
-            "END as aging_bucket, " +
-            "SUM(amount) as total_amount, " +
-            "SUM(paid_amount) as total_paid, " +
-            "SUM(remaining_amount) as total_remaining " +
-            "FROM receivable " +
-            "GROUP BY aging_bucket")
+    @Select("SELECT CASE " +
+            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) < 0 THEN '未到期' " +
+            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 0 AND 30 THEN '1-30天' " +
+            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 31 AND 60 THEN '31-60天' " +
+            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 61 AND 90 THEN '61-90天' " +
+            "   ELSE '90天以上' END as aging_bucket, " +
+            "SUM(amount) as total_amount, SUM(received_amount) as total_paid, " +
+            "SUM(amount - received_amount) as total_remaining " +
+            "FROM receivable GROUP BY CASE " +
+            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) < 0 THEN '未到期' " +
+            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 0 AND 30 THEN '1-30天' " +
+            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 31 AND 60 THEN '31-60天' " +
+            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 61 AND 90 THEN '61-90天' " +
+            "   ELSE '90天以上' END")
     List<AgingAnalysis> getAgingAnalysis();
 
     /**
      * 获取超期应收账款
      */
-    @Select("SELECT *, DATEDIFF(CURRENT_DATE(), due_date) as days_overdue " +
+    @Select("SELECT *, DATEDIFF(day, due_date, CAST(GETDATE() AS date)) as days_overdue " +
             "FROM receivable " +
-            "WHERE due_date < CURRENT_DATE() AND remaining_amount > 0 " +
+            "WHERE due_date < CAST(GETDATE() AS date) AND remaining_amount > 0 " +
             "ORDER BY days_overdue DESC")
     List<Receivable> getOverdueReceivables();
 

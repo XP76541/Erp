@@ -279,6 +279,7 @@ const auditRules: FormRules = {
   action: [{ required: true, message: '请选择操作', trigger: 'change' }],
 }
 
+const currentOrder = ref<SalesOrder | null>(null)
 const outboundDialogVisible = ref(false)
 const outboundFormRef = ref<FormInstance>()
 const outboundForm = reactive({
@@ -392,6 +393,7 @@ async function handleSave() {
 }
 
 async function handleAudit(row: SalesOrder) {
+  currentOrder.value = row
   auditForm.action = 'audit'
   auditForm.remark = ''
   auditDialogVisible.value = true

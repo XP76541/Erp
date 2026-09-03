@@ -63,8 +63,8 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'finance/payables',
-        name: 'payments',
-        component: () => import('@/views/finance/PaymentList.vue'),
+        name: 'payables',
+        component: () => import('@/views/finance/PayableList.vue'),
         meta: { title: '付款核销' },
       },
       {

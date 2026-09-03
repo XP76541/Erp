@@ -2,7 +2,7 @@ package com.erp.module.finance.controller;
 
 import com.erp.common.Result;
 import com.erp.module.finance.dto.ReceivableDtos;
-import com.erp.module.finance.service.AgingUpdateService;
+import com.erp.module.finance.service.ReceivableService;
 import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 import java.math.BigDecimal;
@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 public class AgingController {
 
     private final AgingUpdateService agingUpdateService;
+    private final ReceivableService receivableService;
 
     /**
      * 手动更新指定应收账款的账龄
@@ -48,10 +49,8 @@ public class AgingController {
      * 获取账龄分析数据
      */
     @GetMapping("/analysis")
-    public Result<ReceivableDtos.AgingAnalysisResponse> getAgingAnalysis() {
-        // 这里可以调用ReceivableService中的方法获取账龄分析
-        // 或者直接查询数据库获取分析数据
-        return Result.ok(null); // TODO: 实现具体的账龄分析逻辑
+    public Result<java.util.List<ReceivableDtos.AgingAnalysisResponse>> getAgingAnalysis() {
+        return Result.ok(receivableService.getAgingAnalysis());
     }
 
     /**

@@ -237,8 +237,9 @@ const products = ref<Product[]>([])
 const query = reactive({ page: 1, size: 10, keyword: '', status: '' })
 
 const createDialogVisible = ref(false)
-const selectedOrder = ref<SalesOutboundListResponse | null>(null)
-const orderList = ref<SalesOutboundListResponse[]>([])
+const selectedOrder = ref<SalesOrderListResponse | null>(null)
+const currentOutbound = ref<SalesOutbound | null>(null)
+const orderList = ref<SalesOrderListResponse[]>([])
 const orderQuery = reactive({
   customerId: undefined as number | undefined,
   bizDate: [] as string[],
@@ -462,6 +463,7 @@ async function handleCreateOutbound() {
 }
 
 async function handleAudit(row: SalesOutbound) {
+  currentOutbound.value = row
   auditForm.action = 'audit'
   auditForm.remark = ''
   auditDialogVisible.value = true

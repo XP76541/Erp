@@ -31,6 +31,7 @@ public class Receivable {
 
     private String customerName;
 
+    @TableField("biz_date")
     private LocalDate businessDate;
 
     private LocalDate dueDate;
@@ -38,8 +39,10 @@ public class Receivable {
     private BigDecimal amount;
 
     /** 已核销金额,收款核销时事务性累加 */
+    @TableField("received_amount")
     private BigDecimal paidAmount;
 
+    @TableField("remaining_amount")
     private BigDecimal remainingAmount;
 
     /** UNSETTLED / PARTIAL / SETTLED */
