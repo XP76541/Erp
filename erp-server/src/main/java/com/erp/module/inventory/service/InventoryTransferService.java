@@ -141,9 +141,14 @@ public class InventoryTransferService {
             item.setProductId(input.getProductId());
             item.setFromWarehouseId(request.getFromWarehouseId());
             item.setToWarehouseId(request.getToWarehouseId());
+            if (input.getQty() == null || input.getQty().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException("第 " + lineNo + " 行数量必须大于0");
+            }
             item.setQty(input.getQty());
-            item.setPrice(input.getPrice() != null ? input.getPrice() : BigDecimal.ZERO);
-            item.setAmount(input.getQty().multiply(item.getPrice()).setScale(2, RoundingMode.HALF_UP));
+            // 草稿阶段不接受客户端成本；审核时以调出仓移动平均成本为准
+            item.setPrice(BigDecimal.ZERO);
+            item.setAmount(BigDecimal.ZERO);
+
             item.setNote(input.getNote() == null ? "" : input.getNote());
             itemMapper.insert(item);
         }
@@ -162,19 +167,25 @@ public class InventoryTransferService {
         }
         InventoryTransfer doc = requireDoc(id);
 
-        // ② 出库调拨:从调出仓库减少库存
+        // ② 从调出仓扣减库存并取得真实移动平均成本
         List<InventoryTransferItem> items = itemMapper.selectByTransferId(id);
+        BigDecimal total = BigDecimal.ZERO;
         for (InventoryTransferItem item : items) {
-            inventoryService.stockOut("TRANSFER_OUT", doc.getId(), doc.getDocNo(),
+            BigDecimal sourceCost = inventoryService.stockOut("TRANSFER_OUT", doc.getId(), doc.getDocNo(),
                     item.getProductId(), item.getFromWarehouseId(), item.getQty(), doc.getBizDate());
+            item.setPrice(sourceCost.setScale(2, RoundingMode.HALF_UP));
+            item.setAmount(item.getQty().multiply(item.getPrice()).setScale(2, RoundingMode.HALF_UP));
+            itemMapper.updateById(item);
+            total = total.add(item.getAmount());
         }
 
-        // ③ 入库调拨:向调入仓库增加库存
+        // ③ 以调出仓成本入调入仓，调拨不得改变成本
         for (InventoryTransferItem item : items) {
             inventoryService.stockIn("TRANSFER_IN", doc.getId(), doc.getDocNo(),
-                    item.getProductId(), item.getToWarehouseId(), item.getQty(), item.getPrice(),
-                    doc.getBizDate());
+                    item.getProductId(), item.getToWarehouseId(), item.getQty(), item.getPrice(), doc.getBizDate());
         }
+        doc.setTotalAmount(total.setScale(2, RoundingMode.HALF_UP));
+        transferMapper.updateById(doc);
 
         // ④ 操作日志(审计留痕)
         String detail = "{\"amount\":" + totalAmount(items) + ",\"lines\":" + items.size() + "}";
@@ -243,7 +254,7 @@ public class InventoryTransferService {
     private BigDecimal totalAmount(List<InventoryTransferItem> items) {
         BigDecimal total = BigDecimal.ZERO;
         for (InventoryTransferItem item : items) {
-            total = total.add(item.getAmount());
+            total = total.add(item.getAmount() == null ? BigDecimal.ZERO : item.getAmount());
         }
         return total.setScale(2, RoundingMode.HALF_UP);
     }

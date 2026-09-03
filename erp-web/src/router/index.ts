@@ -98,6 +98,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '应收核销' },
       },
       {
+        path: 'inventory/ledgers',
+        name: 'inventoryLedgers',
+        component: () => import('@/views/inventory/InventoryLedgerList.vue'),
+        meta: { title: '出入库流水' },
+      },
+      {
         path: 'inventory/stocks',
         name: 'inventoryStocks',
         component: () => import('@/views/inventory/InventoryStockList.vue'),

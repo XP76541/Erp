@@ -134,7 +134,7 @@ public class InventoryService {
 
     /** 出库(销售出库/退货出库/调拨出/盘亏等):按当前加权平均结转成本;库存不足整体失败 */
     @Transactional
-    public void stockOut(String docType, Long docId, String docNo,
+    public BigDecimal stockOut(String docType, Long docId, String docNo,
                          Long productId, Long warehouseId, BigDecimal qty,
                          LocalDate bizDate) {
         Inventory inv = inventoryMapper.selectForUpdate(productId, warehouseId);
@@ -171,6 +171,7 @@ public class InventoryService {
         ledger.balanceQty = newQty;
         ledger.balanceAmount = newAmount;
         writeLedger(docType, docId, docNo, productId, warehouseId, ledger, bizDate);
+        return avgCost;
     }
 
     private void writeLedger(String docType, Long docId, String docNo,

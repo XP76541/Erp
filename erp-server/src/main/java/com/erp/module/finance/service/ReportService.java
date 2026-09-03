@@ -77,7 +77,9 @@ public class ReportService {
             ReportDtos.SalesDailyReportResponse response = new ReportDtos.SalesDailyReportResponse();
             response.setReportDate(date);
 
-            List<SalesOutbound> dayOutbounds = dateGroup.get(date);
+            List<SalesOutbound> dayOutbounds = dateGroup.get(date).stream()
+                    .filter(outbound -> request.getCustomerId() == null || request.getCustomerId().equals(outbound.getCustomerId()))
+                    .toList();
             Long totalOrders = (long) dayOutbounds.size();
 
             BigDecimal totalAmount = BigDecimal.ZERO;
@@ -85,11 +87,6 @@ public class ReportService {
             List<ReportDtos.SalesDailyReportItem> items = new ArrayList<>();
 
             for (SalesOutbound outbound : dayOutbounds) {
-                // 如果指定了客户，过滤数据
-                if (request.getCustomerId() != null && !outbound.getCustomerId().equals(request.getCustomerId())) {
-                    continue;
-                }
-
                 ReportDtos.SalesDailyReportItem item = new ReportDtos.SalesDailyReportItem();
                 item.setDocNo(outbound.getDocNo());
                 item.setBusinessDate(outbound.getBizDate());
@@ -235,8 +232,11 @@ public class ReportService {
         BigDecimal totalPayables = payableMapper.selectList(Wrappers.<Payable>lambdaQuery()
                         .ne(Payable::getStatus, "SETTLED")
                         .between(Payable::getBizDate, startDate, endDate))
-                .stream().map(Payable::getPaidAmount)
-                .filter(java.util.Objects::nonNull)
+                .stream().map(payable -> {
+                    BigDecimal amount = payable.getAmount() == null ? BigDecimal.ZERO : payable.getAmount();
+                    BigDecimal paid = payable.getPaidAmount() == null ? BigDecimal.ZERO : payable.getPaidAmount();
+                    return amount.subtract(paid).max(BigDecimal.ZERO);
+                })
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算库存总值

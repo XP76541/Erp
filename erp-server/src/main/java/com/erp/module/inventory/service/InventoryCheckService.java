@@ -217,9 +217,24 @@ public class InventoryCheckService {
             throw new BusinessException("单据不存在或不是盘点中状态,无法审核");
         }
         InventoryCheck doc = requireDoc(id);
+        List<InventoryCheckItem> items = itemMapper.selectByCheckId(id);
+        if (items.isEmpty() || items.stream().anyMatch(item -> item.getActualQty() == null)) {
+            throw new BusinessException("盘点结果未完整提交,无法审核");
+        }
 
-        // ② 更新盘点单状态
-        doc.setStatus("AUDITED");
+        // ② 将盘盈/盘亏差异作为正式库存调整写入台账
+        for (InventoryCheckItem item : items) {
+            BigDecimal diff = item.getDiffQty() == null ? BigDecimal.ZERO : item.getDiffQty();
+            if (diff.compareTo(BigDecimal.ZERO) > 0) {
+                inventoryService.stockIn("CHECK_ADJ", doc.getId(), doc.getDocNo(), item.getProductId(),
+                        item.getWarehouseId(), diff, item.getPrice(), doc.getCheckDate());
+            } else if (diff.compareTo(BigDecimal.ZERO) < 0) {
+                inventoryService.stockOut("CHECK_ADJ", doc.getId(), doc.getDocNo(), item.getProductId(),
+                        item.getWarehouseId(), diff.abs(), doc.getCheckDate());
+            }
+        }
+
+        // ③ 更新盘点单状态（claim 已完成原子状态迁移）
         doc.setAuditBy(user.userId());
         doc.setAuditAt(java.time.LocalDateTime.now());
         checkMapper.updateById(doc);

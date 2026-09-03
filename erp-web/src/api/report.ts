@@ -1,4 +1,4 @@
-import { http } from './http';
+import http from './http';
 
 // 销售日报表
 export interface SalesDailyReportRequest {
@@ -70,25 +70,25 @@ export interface FinanceSummaryResponse {
 // 销售日报表API
 export const salesDailyReportApi = {
   get: (params: SalesDailyReportRequest) =>
-    http.post<ReportResponse<SalesDailyReportResponse[]>>('/finance/reports/sales-daily', params),
+    http.post<SalesDailyReportResponse[]>('/finance/reports/sales-daily', params),
   export: (params: SalesDailyReportRequest) =>
-    http.get<string>('/finance/reports/sales-daily/export', { params }),
+    http.get<Blob>('/finance/reports/sales-daily/export', { params, responseType: 'blob' }),
 };
 
 // 进销存汇总表API
 export const inventorySummaryApi = {
   get: (params: InventorySummaryRequest) =>
-    http.post<ReportResponse<InventorySummaryResponse>>('/finance/reports/inventory-summary', params),
+    http.post<InventorySummaryResponse>('/finance/reports/inventory-summary', params),
   export: (params: InventorySummaryRequest) =>
-    http.get<string>('/finance/reports/inventory-summary/export', { params }),
+    http.get<Blob>('/finance/reports/inventory-summary/export', { params, responseType: 'blob' }),
 };
 
 // 财务汇总表API
 export const financeSummaryApi = {
   get: (params: FinanceSummaryRequest) =>
-    http.post<ReportResponse<FinanceSummaryResponse>>('/finance/reports/finance-summary', params),
+    http.post<FinanceSummaryResponse>('/finance/reports/finance-summary', params),
   export: (params: FinanceSummaryRequest) =>
-    http.get<string>('/finance/reports/finance-summary/export', { params }),
+    http.get<Blob>('/finance/reports/finance-summary/export', { params, responseType: 'blob' }),
 };
 
 // 通用响应类型

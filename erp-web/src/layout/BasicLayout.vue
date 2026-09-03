@@ -61,6 +61,7 @@
             <span>库存管理</span>
           </template>
           <el-menu-item index="/inventory/stocks">即时库存</el-menu-item>
+          <el-menu-item index="/inventory/ledgers">出入库流水</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="system">

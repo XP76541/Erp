@@ -1,4 +1,5 @@
-import { http } from './http';
+import http from './http';
+import type { PageResult } from './http';
 
 // ==================== 库存调拨相关 ====================
 
@@ -10,7 +11,7 @@ export const inventoryTransferApi = {
     warehouseId?: number;
     page?: number;
     size?: number;
-  }) => http.get<Array<{
+  }) => http.get<PageResult<{
     id: number;
     docNo: string;
     fromWarehouseId: number;
@@ -127,7 +128,7 @@ export const inventoryCheckApi = {
     warehouseId?: number;
     page?: number;
     size?: number;
-  }) => http.get<Array<{
+  }) => http.get<PageResult<{
     id: number;
     docNo: string;
     warehouseId: number;
@@ -260,7 +261,7 @@ export const inventoryWarningApi = {
     isActive?: boolean;
     page?: number;
     size?: number;
-  }) => http.get<Array<{
+  }) => http.get<PageResult<{
     id: number;
     warningType: string;
     warehouseId: number;
