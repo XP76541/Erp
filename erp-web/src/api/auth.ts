@@ -1,15 +1,21 @@
-import http from './http'
+import http from '@/api/http'
 
 export interface LoginResult {
   token: string
   username: string
   realName: string
+  /** Optional until the authentication API returns role codes. */
+  roleCodes?: string[]
+  roles?: string[]
 }
 
-export interface LoginUser {
+export interface AuthUser {
   userId: number
   username: string
   realName: string
+  /** Optional until the authentication API returns role codes. */
+  roleCodes?: string[]
+  roles?: string[]
 }
 
 export const authApi = {
@@ -17,7 +23,7 @@ export const authApi = {
     return http.post<unknown, LoginResult>('/auth/login', { username, password })
   },
   me() {
-    return http.get<unknown, LoginUser>('/auth/me')
+    return http.get<unknown, AuthUser>('/auth/me')
   },
   logout() {
     return http.post('/auth/logout')

@@ -58,20 +58,20 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
             "WHERE id = #{id} AND amount - received_amount >= #{amount}")
     int updatePaidAmount(@Param("id") Long id, @Param("amount") BigDecimal amount);
 
-    /**
-     * 获取客户应收账款统计
-     */
-    @Select("SELECT " +
-            "customer_id, " +
-            "SUM(amount) as total_amount, " +
-            "SUM(received_amount) as total_paid, " +
-            "SUM(remaining_amount) as total_remaining, " +
-            "SUM(CASE WHEN status = 'UNSETTLED' THEN remaining_amount ELSE 0 END) as unsettled_amount, " +
-            "SUM(CASE WHEN status = 'PARTIAL' THEN remaining_amount ELSE 0 END) as partial_amount, " +
-            "SUM(CASE WHEN status = 'SETTLED' THEN remaining_amount ELSE 0 END) as settled_amount " +
-            "FROM receivable " +
-            "GROUP BY customer_id")
-    List<ReceivableStatistics> getCustomerReceivableStatistics();
+    @Select({"<script>",
+            "SELECT customer_id, ",
+            "SUM(COALESCE(amount, 0)) as total_amount, ",
+            "SUM(COALESCE(received_amount, 0)) as total_paid, ",
+            "SUM(COALESCE(remaining_amount, 0)) as total_remaining, ",
+            "SUM(CASE WHEN status = 'UNSETTLED' THEN COALESCE(remaining_amount, 0) ELSE 0 END) as unsettled_amount, ",
+            "SUM(CASE WHEN status = 'PARTIAL' THEN COALESCE(remaining_amount, 0) ELSE 0 END) as partial_amount, ",
+            "SUM(CASE WHEN status = 'SETTLED' THEN COALESCE(remaining_amount, 0) ELSE 0 END) as settled_amount ",
+            "FROM receivable ",
+            "<if test='customerIds != null'>WHERE customer_id IN ",
+            "<foreach collection='customerIds' item='customerId' open='(' separator=',' close=')'>#{customerId}</foreach>",
+            "</if>",
+            "GROUP BY customer_id", "</script>"})
+    List<ReceivableStatistics> getCustomerReceivableStatisticsScoped(@Param("customerIds") List<Long> customerIds);
 
     /**
      * 获取账龄分析数据（截止日期由调用方明确传入，避免历史查询依赖服务器当前日期）。

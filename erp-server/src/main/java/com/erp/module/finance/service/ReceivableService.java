@@ -93,12 +93,16 @@ public class ReceivableService {
         }
         wrapper.orderByDesc(Receivable::getId);
 
-        List<Receivable> receivables = receivableMapper.selectList(wrapper);
+        Long page = params.getPage() == null ? 1L : Math.max(params.getPage(), 1L);
+        Long size = params.getSize() == null ? 10L : Math.max(params.getSize(), 1L);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Receivable> result =
+                receivableMapper.selectPage(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size), wrapper);
+        List<Receivable> receivables = result.getRecords();
         List<ReceivableDtos.ReceivableListResponse> responses = receivables.stream()
                 .map(this::convertToListResponse)
                 .collect(Collectors.toList());
 
-        return PageResult.of(receivables.size(), responses);
+        return PageResult.of(result.getTotal(), responses);
     }
 
     /**
@@ -134,8 +138,16 @@ public class ReceivableService {
         authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
         LocalDate bizDate = request.getBusinessDate() != null ?
                 request.getBusinessDate() : LocalDate.now();
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new BusinessException("应收明细不能为空");
+        }
+        for (ReceivableDtos.ReceivableCreateRequest.Item item : request.getItems()) {
+            if (item.getAmount() == null || item.getAmount().signum() <= 0 || item.getAmount().scale() > 2) {
+                throw new BusinessException("应收金额必须大于0且最多两位小数");
+            }
+        }
 
-        // 创建应收账款记录
+        int createdCount = 0;
         for (ReceivableDtos.ReceivableCreateRequest.Item item : request.getItems()) {
             Receivable receivable = new Receivable();
             receivable.setDocNo(docSequenceService.nextDocNo("REC", "REC", bizDate.toString()));
@@ -153,9 +165,10 @@ public class ReceivableService {
             receivable.setUpdatedAt(LocalDateTime.now());
 
             receivableMapper.insert(receivable);
+            createdCount++;
         }
 
-        return 0L; // 返回创建的记录数量
+        return (long) createdCount; // 返回创建的记录数量
     }
 
     /**
@@ -164,6 +177,7 @@ public class ReceivableService {
     @Transactional
     public ReceivableDtos.SettleResponse settleReceivable(ReceivableDtos.SettleRequest request,
                                                         TokenStore.LoginUser user) {
+        authorizationService.requireFinanceAccess(user);
         Receivable receivable = receivableMapper.selectForUpdate(request.getReceivableId());
         if (receivable == null) {
             throw new BusinessException("应收账款记录不存在");
@@ -230,14 +244,16 @@ public class ReceivableService {
      */
     @Transactional
     public void batchSettle(ReceivableDtos.BatchSettleRequest request, TokenStore.LoginUser user) {
+        authorizationService.requireFinanceAccess(user);
+        if (request == null || request.getSettlements() == null || request.getSettlements().isEmpty()) {
+            throw new BusinessException("批量核销明细不能为空");
+        }
         for (ReceivableDtos.SettleRequest settleRequest : request.getSettlements()) {
             settleReceivable(settleRequest, user);
         }
     }
 
-    /**
-     * 获取客户应收账款统计
-     */
+    /** 获取客户应收账款统计 */
     public List<ReceivableDtos.ReceivableStatisticsResponse> getCustomerStatistics() {
         return getCustomerStatistics(null);
     }
@@ -245,9 +261,8 @@ public class ReceivableService {
     public List<ReceivableDtos.ReceivableStatisticsResponse> getCustomerStatistics(TokenStore.LoginUser user) {
         List<Long> customerIds = scopedCustomerIds(user);
         if (customerIds != null && customerIds.isEmpty()) return List.of();
-        List<ReceivableMapper.ReceivableStatistics> statistics = receivableMapper.getCustomerReceivableStatistics();
+        List<ReceivableMapper.ReceivableStatistics> statistics = receivableMapper.getCustomerReceivableStatisticsScoped(customerIds);
         return statistics.stream()
-                .filter(stat -> customerIds == null || customerIds.contains(stat.getCustomerId()))
                 .map(stat -> {
                     Customer customer = customerMapper.selectById(stat.getCustomerId());
                     return new ReceivableDtos.ReceivableStatisticsResponse(

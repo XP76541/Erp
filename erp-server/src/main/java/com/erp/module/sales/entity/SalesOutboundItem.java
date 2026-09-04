@@ -28,17 +28,20 @@ public class SalesOutboundItem {
     @TableField("product_id")
     private Long productId;
 
-    @TableField("product_code")
+    @TableField(exist = false)
     private String productCode;
 
-    @TableField("product_name")
+    @TableField(exist = false)
     private String productName;
 
-    @TableField("spec")
+    @TableField(exist = false)
     private String spec;
 
-    @TableField("unit")
+    @TableField(exist = false)
     private String unit;
+
+    @TableField("warehouse_id")
+    private Long warehouseId;
 
     @TableField("qty")
     private BigDecimal qty;
@@ -48,6 +51,12 @@ public class SalesOutboundItem {
 
     @TableField("amount")
     private BigDecimal amount;
+
+    @TableField("cost_price")
+    private BigDecimal costPrice;
+
+    @TableField("cost_amount")
+    private BigDecimal costAmount;
 
     @TableField("remark")
     private String remark;
@@ -105,6 +114,14 @@ public class SalesOutboundItem {
         this.productId = productId;
     }
 
+    public Long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public void setWarehouseId(Long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
     public String getProductCode() {
         return productCode;
     }
@@ -159,6 +176,22 @@ public class SalesOutboundItem {
 
     public void setAmount(BigDecimal amount) {
         this.amount = amount;
+    }
+
+    public BigDecimal getCostPrice() {
+        return costPrice;
+    }
+
+    public void setCostPrice(BigDecimal costPrice) {
+        this.costPrice = costPrice;
+    }
+
+    public BigDecimal getCostAmount() {
+        return costAmount;
+    }
+
+    public void setCostAmount(BigDecimal costAmount) {
+        this.costAmount = costAmount;
     }
 
     public String getRemark() {

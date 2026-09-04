@@ -4,6 +4,7 @@ import com.erp.common.Result;
 import com.erp.common.PageResult;
 import com.erp.module.system.AuthInterceptor;
 import com.erp.module.system.TokenStore;
+import com.erp.module.system.service.SystemAuthorizationService;
 import com.erp.module.inventory.entity.InventoryCheck;
 import com.erp.module.inventory.service.InventoryCheckService;
 import com.erp.module.inventory.dto.InventoryCheckDtos;
@@ -21,6 +22,7 @@ import java.util.List;
 public class InventoryCheckController {
 
     private final InventoryCheckService inventoryCheckService;
+    private final SystemAuthorizationService authorizationService;
 
     /**
      * 分页查询库存盘点单
@@ -33,6 +35,7 @@ public class InventoryCheckController {
             @RequestParam(defaultValue = "1") Long page,
             @RequestParam(defaultValue = "10") Long size,
             HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryRead(currentUser(httpRequest));
 
         PageResult<InventoryCheckDtos.ListResponse> result = inventoryCheckService.page(
                 page, size, keyword, status, warehouseId);
@@ -44,6 +47,7 @@ public class InventoryCheckController {
      */
     @GetMapping("/{id}")
     public Result<InventoryCheckDtos.DetailResponse> detail(@PathVariable Long id, HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryRead(currentUser(httpRequest));
         InventoryCheckDtos.DetailResponse detail = inventoryCheckService.detail(id);
         return Result.success(detail);
     }
@@ -54,6 +58,7 @@ public class InventoryCheckController {
     @PostMapping
     public Result<Long> create(@RequestBody InventoryCheckDtos.CreateRequest request, HttpServletRequest httpRequest) {
         TokenStore.LoginUser currentUser = currentUser(httpRequest);
+        authorizationService.requireInventoryWrite(currentUser);
         Long checkId = inventoryCheckService.create(request, currentUser);
         return Result.success(checkId);
     }
@@ -63,6 +68,7 @@ public class InventoryCheckController {
      */
     @PutMapping("/{id}/start-check")
     public Result<Void> startCheck(@PathVariable Long id, @RequestBody InventoryCheckDtos.StartCheckRequest request, HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryWrite(currentUser(httpRequest));
         TokenStore.LoginUser currentUser = currentUser(httpRequest);
         String ip = httpRequest.getRemoteAddr();
         inventoryCheckService.startCheck(id, currentUser, ip);
@@ -76,6 +82,7 @@ public class InventoryCheckController {
     public Result<Void> submitResult(@PathVariable Long id,
                                    @RequestBody InventoryCheckDtos.SubmitResultRequest request,
                                    HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryWrite(currentUser(httpRequest));
         TokenStore.LoginUser currentUser = currentUser(httpRequest);
         inventoryCheckService.submitResult(id, request, currentUser, httpRequest.getRemoteAddr());
         return Result.success();
@@ -86,6 +93,7 @@ public class InventoryCheckController {
      */
     @PutMapping("/{id}/audit")
     public Result<Void> audit(@PathVariable Long id, @RequestBody InventoryCheckDtos.AuditRequest request, HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryWrite(currentUser(httpRequest));
         TokenStore.LoginUser currentUser = currentUser(httpRequest);
         String ip = httpRequest.getRemoteAddr();
         inventoryCheckService.audit(id, currentUser, ip);
@@ -97,6 +105,7 @@ public class InventoryCheckController {
      */
     @PutMapping("/{id}/cancel")
     public Result<Void> cancel(@PathVariable Long id, @RequestBody InventoryCheckDtos.CancelRequest request, HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryWrite(currentUser(httpRequest));
         TokenStore.LoginUser currentUser = currentUser(httpRequest);
         String ip = httpRequest.getRemoteAddr();
         inventoryCheckService.cancel(id, currentUser, ip);
@@ -107,7 +116,8 @@ public class InventoryCheckController {
      * 根据仓库查询盘点列表
      */
     @GetMapping("/warehouse/{warehouseId}")
-    public Result<List<InventoryCheckDtos.WarehouseResponse>> listByWarehouse(@PathVariable Long warehouseId) {
+    public Result<List<InventoryCheckDtos.WarehouseResponse>> listByWarehouse(@PathVariable Long warehouseId, HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryRead(currentUser(httpRequest));
         List<InventoryCheckDtos.WarehouseResponse> result = inventoryCheckService.listByWarehouse(warehouseId);
         return Result.success(result);
     }
@@ -116,7 +126,8 @@ public class InventoryCheckController {
      * 获取盘点统计
      */
     @GetMapping("/stats")
-    public Result<InventoryCheckDtos.StatsResponse> getStats() {
+    public Result<InventoryCheckDtos.StatsResponse> getStats(HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryRead(currentUser(httpRequest));
         InventoryCheckDtos.StatsResponse stats = inventoryCheckService.getStats();
         return Result.success(stats);
     }
@@ -125,7 +136,8 @@ public class InventoryCheckController {
      * 获取待盘点的单据数量
      */
     @GetMapping("/stats/draft-count")
-    public Result<Integer> getDraftCount() {
+    public Result<Integer> getDraftCount(HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryRead(currentUser(httpRequest));
         Integer count = inventoryCheckService.getStats().getDraftCount();
         return Result.success(count);
     }
@@ -134,7 +146,8 @@ public class InventoryCheckController {
      * 获取盘点中的单据数量
      */
     @GetMapping("/stats/checking-count")
-    public Result<Integer> getCheckingCount() {
+    public Result<Integer> getCheckingCount(HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryRead(currentUser(httpRequest));
         Integer count = inventoryCheckService.getStats().getCheckingCount();
         return Result.success(count);
     }
@@ -143,7 +156,8 @@ public class InventoryCheckController {
      * 获取已盘点的单据数量
      */
     @GetMapping("/stats/audited-count")
-    public Result<Integer> getAuditedCount() {
+    public Result<Integer> getAuditedCount(HttpServletRequest httpRequest) {
+        authorizationService.requireInventoryRead(currentUser(httpRequest));
         Integer count = inventoryCheckService.getStats().getAuditedCount();
         return Result.success(count);
     }

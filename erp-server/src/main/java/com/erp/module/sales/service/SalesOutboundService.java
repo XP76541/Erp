@@ -189,6 +189,7 @@ public class SalesOutboundService {
             outboundItem.setOrderItemId(input.getOrderItemId());
             outboundItem.setLineNo(lineNo);
             outboundItem.setProductId(orderItem.getProductId());
+            outboundItem.setWarehouseId(request.getWarehouseId());
             outboundItem.setQty(input.getQty());
             outboundItem.setPrice(orderItem.getPrice());
             outboundItem.setAmount(input.getQty().multiply(orderItem.getPrice()).setScale(2, RoundingMode.HALF_UP));
@@ -235,9 +236,14 @@ public class SalesOutboundService {
             }
 
             // 库存出库
-            inventoryService.stockOut("SALES_OUT", outbound.getId(), outbound.getDocNo(),
+            BigDecimal costPrice = inventoryService.stockOut("SALES_OUT", outbound.getId(), outbound.getDocNo(),
                     item.getProductId(), outbound.getWarehouseId(), item.getQty(),
                     outbound.getBizDate());
+            item.setCostPrice(costPrice.setScale(2, RoundingMode.HALF_UP));
+            item.setCostAmount(costPrice.multiply(item.getQty()).setScale(2, RoundingMode.HALF_UP));
+            if (outboundItemMapper.updateById(item) != 1) {
+                throw new BusinessException("出库成本快照保存失败");
+            }
         }
 
         // ③ 生成应收
@@ -247,6 +253,8 @@ public class SalesOutboundService {
         }
 
         Receivable receivable = new Receivable();
+        receivable.setDocType("SALES_OUT");
+        receivable.setDocId(outbound.getId());
         receivable.setDocNo(docSequenceService.nextDocNo("REC", "REC", LocalDate.now().format(PERIOD)));
         receivable.setOrderId(outbound.getOrderId());
         SalesOrder order = orderMapper.selectById(outbound.getOrderId());

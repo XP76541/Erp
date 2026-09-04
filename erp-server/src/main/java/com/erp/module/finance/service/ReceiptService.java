@@ -15,13 +15,20 @@ import com.erp.module.system.service.DocSequenceService;
 import com.erp.module.system.service.OperationLogService;
 import com.erp.module.system.service.SystemAuthorizationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -44,9 +51,11 @@ public class ReceiptService {
             throw new BusinessException("至少需要一条应收核销明细");
         }
         String key = normalizeKey(request.getIdempotencyKey());
+        if (key != null && key.length() > 100) throw new BusinessException("幂等键长度不能超过100个字符");
+        String fingerprint = requestFingerprint(request);
         if (key != null) {
             Receipt existing = receiptMapper.selectByIdempotencyKey(key);
-            if (existing != null) return toResponse(existing);
+            if (existing != null) return existingResponseOrConflict(existing, fingerprint);
         }
 
         Customer customer = customerMapper.selectById(request.getCustomerId());
@@ -55,7 +64,9 @@ public class ReceiptService {
 
         BigDecimal total = BigDecimal.ZERO;
         Set<Long> ids = new HashSet<>();
-        for (ReceivableDtos.ReceiptCreateRequest.AllocationItem item : request.getAllocations()) {
+        List<ReceivableDtos.ReceiptCreateRequest.AllocationItem> allocations = new ArrayList<>(request.getAllocations());
+        allocations.sort(Comparator.comparing(ReceivableDtos.ReceiptCreateRequest.AllocationItem::getReceivableId));
+        for (ReceivableDtos.ReceiptCreateRequest.AllocationItem item : allocations) {
             validateAmount(item.getAmount(), "核销金额");
             if (!ids.add(item.getReceivableId())) throw new BusinessException("应收账款不能重复核销");
             Receivable receivable = receivableMapper.selectForUpdate(item.getReceivableId());
@@ -75,6 +86,7 @@ public class ReceiptService {
         Receipt receipt = new Receipt();
         receipt.setDocNo(docSequenceService.nextDocNo("RCV", "RCV", bizDate.toString()));
         receipt.setIdempotencyKey(key);
+        receipt.setIdempotencyFingerprint(fingerprint);
         receipt.setCustomerId(customer.getId());
         receipt.setBizDate(bizDate);
         receipt.setAmount(request.getAmount());
@@ -84,9 +96,17 @@ public class ReceiptService {
         receipt.setAuditBy(user.userId()); receipt.setAuditAt(LocalDateTime.now());
         receipt.setRemark(request.getRemark() == null ? "" : request.getRemark());
         receipt.setCreatedBy(user.userId()); receipt.setCreatedAt(LocalDateTime.now());
-        receiptMapper.insert(receipt);
+        try {
+            receiptMapper.insert(receipt);
+        } catch (DataIntegrityViolationException ex) {
+            if (key == null) throw ex;
+            // The insert failure marks the surrounding transaction rollback-only; do not query
+            // or return from this doomed transaction. The caller can retry and then read the
+            // committed receipt through the normal idempotency lookup path.
+            throw new BusinessException(409, "幂等请求正在处理中，请稍后重试");
+        }
 
-        for (ReceivableDtos.ReceiptCreateRequest.AllocationItem item : request.getAllocations()) {
+        for (ReceivableDtos.ReceiptCreateRequest.AllocationItem item : allocations) {
             ReceiptAllocation allocation = new ReceiptAllocation();
             allocation.setReceiptId(receipt.getId()); allocation.setReceivableId(item.getReceivableId());
             allocation.setAmount(item.getAmount()); allocationMapper.insert(allocation);
@@ -103,8 +123,45 @@ public class ReceiptService {
         if (amount == null || amount.signum() <= 0 || amount.scale() > 2) throw new BusinessException(name + "必须大于0且最多2位小数");
     }
     private BigDecimal nullSafe(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }
+    private String money(BigDecimal value) {
+        return nullSafe(value).setScale(2, java.math.RoundingMode.UNNECESSARY).toPlainString();
+    }
     private String normalizeKey(String key) { return key == null || key.isBlank() ? null : key.trim(); }
     private ReceivableDtos.ReceiptResponse toResponse(Receipt r) { return toResponse(r, allocationMapper.getAllocatedAmount(r.getId())); }
+
+    private ReceivableDtos.ReceiptResponse existingResponseOrConflict(Receipt existing, String fingerprint) {
+        if (existing.getIdempotencyFingerprint() == null
+                || !existing.getIdempotencyFingerprint().equals(fingerprint)) {
+            throw new BusinessException(409, "幂等键已用于不同的收款请求，无法复用历史记录");
+        }
+        return toResponse(existing);
+    }
+
+    private String requestFingerprint(ReceivableDtos.ReceiptCreateRequest request) {
+        LocalDate bizDate = request.getBizDate() == null ? LocalDate.now() : request.getBizDate();
+        String method = request.getMethod() == null ? "转账" : request.getMethod();
+        String bankAccount = request.getBankAccount() == null ? "" : request.getBankAccount();
+        String remark = request.getRemark() == null ? "" : request.getRemark();
+        StringBuilder canonical = new StringBuilder()
+                .append(request.getCustomerId()).append('|')
+                .append(bizDate).append('|')
+                .append(money(request.getAmount())).append('|')
+                .append(method).append('|')
+                .append(bankAccount).append('|')
+                .append(remark).append('|');
+        request.getAllocations().stream()
+                .sorted(java.util.Comparator.comparing(ReceivableDtos.ReceiptCreateRequest.AllocationItem::getReceivableId))
+                .forEach(item -> canonical.append(item.getReceivableId()).append('=').append(money(item.getAmount())).append(';'));
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(64);
+            for (byte b : digest) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256不可用", ex);
+        }
+    }
+
     private ReceivableDtos.ReceiptResponse toResponse(Receipt r, BigDecimal allocated) {
         ReceivableDtos.ReceiptResponse out = new ReceivableDtos.ReceiptResponse();
         out.setId(r.getId()); out.setDocNo(r.getDocNo()); out.setCustomerId(r.getCustomerId()); out.setBizDate(r.getBizDate());

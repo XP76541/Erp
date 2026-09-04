@@ -17,18 +17,28 @@ import java.util.List;
 public class ReportExcelService {
     public byte[] salesDaily(List<ReportDtos.SalesDailyReportResponse> reports) {
         return workbook("销售日报", wb -> {
-            Sheet sheet = wb.createSheet("销售日报");
+            Sheet summary = wb.createSheet("日报汇总");
+            Row header = summary.createRow(0);
+            String[] summaryColumns = {"日期", "单据数", "销售额", "已发货金额"};
+            for (int i = 0; i < summaryColumns.length; i++) summary.createCell(i).setCellValue(summaryColumns[i]);
+            int summaryRow = 1;
+            for (var report : reports) {
+                Row row = summary.createRow(summaryRow++);
+                row.createCell(0).setCellValue(String.valueOf(report.getReportDate()));
+                row.createCell(1).setCellValue(report.getTotalOrders() == null ? 0 : report.getTotalOrders());
+                number(row, 2, report.getTotalAmount()); number(row, 3, report.getShippedAmount());
+            }
+            Sheet sheet = wb.createSheet("单据明细");
             Row header = sheet.createRow(0);
-            String[] columns = {"日期", "单据数", "销售额", "已发货金额", "单号", "客户", "状态", "金额"};
+            String[] columns = {"日期", "单号", "客户", "状态", "金额", "已发货金额"};
             for (int i = 0; i < columns.length; i++) header.createCell(i).setCellValue(columns[i]);
             int rowNo = 1;
             for (var report : reports) for (var order : report.getOrders()) {
                 Row row = sheet.createRow(rowNo++);
-                row.createCell(0).setCellValue(String.valueOf(report.getReportDate()));
-                row.createCell(1).setCellValue(report.getTotalOrders() == null ? 0 : report.getTotalOrders());
-                number(row, 2, report.getTotalAmount()); number(row, 3, report.getShippedAmount());
-                row.createCell(4).setCellValue(order.getDocNo()); row.createCell(5).setCellValue(order.getCustomerName());
-                row.createCell(6).setCellValue(order.getStatus()); number(row, 7, order.getAmount());
+                row.createCell(0).setCellValue(String.valueOf(order.getBusinessDate()));
+                row.createCell(1).setCellValue(order.getDocNo()); row.createCell(2).setCellValue(order.getCustomerName());
+                row.createCell(3).setCellValue(order.getStatus()); number(row, 4, order.getAmount());
+                number(row, 5, order.getShippedAmount());
             }
         });
     }
@@ -77,10 +87,14 @@ public class ReportExcelService {
         return workbook("财务汇总", wb -> {
             Sheet sheet = wb.createSheet("财务汇总"); Row header = sheet.createRow(0);
             header.createCell(0).setCellValue("项目"); header.createCell(1).setCellValue("金额");
-            String[][] values = {{"销售额", String.valueOf(report.getTotalSales())}, {"采购额", String.valueOf(report.getTotalPurchases())},
-                    {"应收余额", String.valueOf(report.getTotalReceivables())}, {"应付余额", String.valueOf(report.getTotalPayables())},
-                    {"库存金额", String.valueOf(report.getTotalInventory())}, {"净利润", String.valueOf(report.getNetProfit())}};
-            for (int i = 0; i < values.length; i++) { Row row = sheet.createRow(i + 1); row.createCell(0).setCellValue(values[i][0]); row.createCell(1).setCellValue(values[i][1]); }
+            String[] values = {"销售额", "采购额", "应收余额", "应付余额", "库存金额", "净利润"};
+            BigDecimal[] amounts = {report.getTotalSales(), report.getTotalPurchases(), report.getTotalReceivables(),
+                    report.getTotalPayables(), report.getTotalInventory(), report.getNetProfit()};
+            for (int i = 0; i < values.length; i++) {
+                Row row = sheet.createRow(i + 1); row.createCell(0).setCellValue(values[i]);
+                if (amounts[i] != null) number(row, 1, amounts[i]);
+                else row.createCell(1).setCellValue("不可用");
+            }
         });
     }
 

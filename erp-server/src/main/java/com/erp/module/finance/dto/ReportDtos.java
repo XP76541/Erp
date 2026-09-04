@@ -55,6 +55,8 @@ public class ReportDtos {
         private LocalDate date;
         private Long warehouseId;
         private Long productId;
+        /** 仅财务/管理角色可返回成本及库存金额。 */
+        private boolean includeCost;
     }
 
     /**
@@ -90,6 +92,8 @@ public class ReportDtos {
     public static class FinanceSummaryRequest {
         private LocalDate startDate;
         private LocalDate endDate;
+        /** SALES 角色只能查看本人销售范围；其他角色可不填。 */
+        private Long salespersonId;
     }
 
     /**
@@ -103,6 +107,8 @@ public class ReportDtos {
         private BigDecimal totalReceivables;
         private BigDecimal totalPayables;
         private BigDecimal totalInventory;
+        /** 当前数据模型没有出库成本快照，净利润不作销售额减采购额的伪毛利。 */
         private BigDecimal netProfit;
+        private boolean costDataAvailable;
     }
 }

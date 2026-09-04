@@ -7,12 +7,15 @@ import com.erp.module.system.AuthInterceptor;
 import com.erp.module.system.TokenStore;
 import com.erp.module.system.entity.SysUser;
 import com.erp.module.system.mapper.SysUserMapper;
+import com.erp.module.system.service.SystemAuthorizationService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Set;
 
 /**
  * 认证接口(骨架实现,菜单/按钮权限点后续接入 sys_permission)
@@ -25,11 +28,12 @@ public class AuthController {
     private final SysUserMapper sysUserMapper;
     private final PasswordEncoder passwordEncoder;
     private final TokenStore tokenStore;
+    private final SystemAuthorizationService authorizationService;
 
     public record LoginRequest(@NotBlank String username, @NotBlank String password) {
     }
 
-    public record LoginResponse(String token, String username, String realName) {
+    public record LoginResponse(String token, String username, String realName, Set<String> roleCodes) {
     }
 
     @PostMapping("/login")
@@ -42,15 +46,21 @@ public class AuthController {
         if (user.getIsActive() == null || user.getIsActive() == 0) {
             throw new BusinessException(403, "账号已被禁用,请联系管理员");
         }
-        String token = tokenStore.create(
-                new TokenStore.LoginUser(user.getId(), user.getUsername(), user.getRealName()));
-        return Result.ok(new LoginResponse(token, user.getUsername(), user.getRealName()));
+        TokenStore.LoginUser loginUser =
+                new TokenStore.LoginUser(user.getId(), user.getUsername(), user.getRealName());
+        String token = tokenStore.create(loginUser);
+        return Result.ok(new LoginResponse(token, user.getUsername(), user.getRealName(),
+                authorizationService.roleCodes(loginUser)));
     }
 
     @GetMapping("/me")
-    public Result<TokenStore.LoginUser> me(
+    public Result<AuthUserResponse> me(
             @RequestAttribute(AuthInterceptor.ATTR_LOGIN_USER) TokenStore.LoginUser user) {
-        return Result.ok(user);
+        return Result.ok(new AuthUserResponse(user.userId(), user.username(), user.realName(),
+                authorizationService.roleCodes(user)));
+    }
+
+    public record AuthUserResponse(Long userId, String username, String realName, Set<String> roleCodes) {
     }
 
     @PostMapping("/logout")

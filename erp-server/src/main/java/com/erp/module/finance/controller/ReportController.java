@@ -51,7 +51,9 @@ public class ReportController {
     @PostMapping("/inventory-summary")
     public Result<ReportDtos.InventorySummaryResponse> getInventorySummary(@RequestBody ReportDtos.InventorySummaryRequest request,
                                                                              jakarta.servlet.http.HttpServletRequest httpRequest) {
-        authorizationService.requireReportAccess(currentUser(httpRequest));
+        TokenStore.LoginUser user = currentUser(httpRequest);
+        authorizationService.requireReportAccess(user);
+        request.setIncludeCost(authorizationService.canViewCostReport(user));
         ReportDtos.InventorySummaryResponse result = reportService.getInventorySummary(request);
         return Result.success(result);
     }
@@ -62,7 +64,10 @@ public class ReportController {
     @PostMapping("/finance-summary")
     public Result<ReportDtos.FinanceSummaryResponse> getFinanceSummary(@RequestBody ReportDtos.FinanceSummaryRequest request,
                                                                          jakarta.servlet.http.HttpServletRequest httpRequest) {
-        authorizationService.requireReportAccess(currentUser(httpRequest));
+        TokenStore.LoginUser user = currentUser(httpRequest);
+        authorizationService.requireCostReportAccess(user);
+        Long scope = authorizationService.reportSalespersonScope(user);
+        if (scope != null) request.setSalespersonId(scope);
         ReportDtos.FinanceSummaryResponse result = reportService.getFinanceSummary(request);
         return Result.success(result);
     }
@@ -103,11 +108,13 @@ public class ReportController {
             @RequestParam(required = false) Long warehouseId,
             @RequestParam(required = false) Long productId,
             jakarta.servlet.http.HttpServletRequest httpRequest) {
-        authorizationService.requireReportAccess(currentUser(httpRequest));
+        TokenStore.LoginUser user = currentUser(httpRequest);
+        authorizationService.requireReportAccess(user);
         ReportDtos.InventorySummaryRequest request = new ReportDtos.InventorySummaryRequest();
         if (date != null) request.setDate(java.time.LocalDate.parse(date));
         request.setWarehouseId(warehouseId);
         request.setProductId(productId);
+        request.setIncludeCost(authorizationService.canViewCostReport(user));
 
         ReportDtos.InventorySummaryResponse data = reportService.getInventorySummary(request);
 
@@ -123,11 +130,13 @@ public class ReportController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             jakarta.servlet.http.HttpServletRequest httpRequest) {
-        authorizationService.requireReportAccess(currentUser(httpRequest));
+        TokenStore.LoginUser user = currentUser(httpRequest);
+        authorizationService.requireCostReportAccess(user);
         ReportDtos.FinanceSummaryRequest request = new ReportDtos.FinanceSummaryRequest();
         if (startDate != null) request.setStartDate(java.time.LocalDate.parse(startDate));
         if (endDate != null) request.setEndDate(java.time.LocalDate.parse(endDate));
-
+        Long scope = authorizationService.reportSalespersonScope(user);
+        if (scope != null) request.setSalespersonId(scope);
         ReportDtos.FinanceSummaryResponse data = reportService.getFinanceSummary(request);
 
         byte[] bytes = excelService.financeSummary(data);

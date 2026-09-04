@@ -52,6 +52,40 @@ public class SystemAuthorizationService {
         }
     }
 
+    /** 库存查询允许仓库角色查看数量；成本字段仅限管理层及财务。返回是否可见成本。 */
+    public boolean requireInventoryQueryAccess(TokenStore.LoginUser user) {
+        Set<String> roles = roleCodes(user);
+        if (roles.contains("ADMIN") || roles.contains("BOSS") || roles.contains("FINANCE")) return true;
+        if (roles.contains("WAREHOUSE")) return false;
+        throw new BusinessException(403, "无库存查询权限");
+    }
+
+    /** 调拨、盘点及其库存变更仅允许仓库或管理角色操作。 */
+    public void requireInventoryWrite(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS") && !hasRole(user, "WAREHOUSE")) {
+            throw new BusinessException(403, "无调拨及盘点操作权限");
+        }
+    }
+
+    /** 库存单据查询允许仓库、财务及管理角色，财务仅保持只读。 */
+    public void requireInventoryRead(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS")
+                && !hasRole(user, "WAREHOUSE") && !hasRole(user, "FINANCE")) {
+            throw new BusinessException(403, "无库存单据查看权限");
+        }
+    }
+
+
+    /** 仅财务及管理角色可查看含成本/库存金额的报表。 */
+    public void requireCostReportAccess(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS") && !hasRole(user, "FINANCE")) {
+            throw new BusinessException(403, "无成本及库存金额报表权限");
+        }
+    }
+
+    public boolean canViewCostReport(TokenStore.LoginUser user) {
+        return hasRole(user, "ADMIN") || hasRole(user, "BOSS") || hasRole(user, "FINANCE");
+    }
 
     /** 销售员只能查看本人业务员维度；其他报表角色可按请求筛选。 */
     public Long reportSalespersonScope(TokenStore.LoginUser user) {
@@ -81,7 +115,12 @@ public class SystemAuthorizationService {
 
     /** SALES users are scoped to their own salesperson id; other approved roles are unrestricted. */
     public Long salespersonScope(TokenStore.LoginUser user) {
-        return hasRole(user, "SALES") ? user.userId() : null;
+        Set<String> roles = roleCodes(user);
+        if (roles.contains("ADMIN") || roles.contains("BOSS") || roles.contains("FINANCE")
+                || roles.contains("WAREHOUSE")) {
+            return null;
+        }
+        return roles.contains("SALES") ? user.userId() : null;
     }
 
     public void requireUnrestrictedOrSalesperson(TokenStore.LoginUser user, Long salespersonId) {

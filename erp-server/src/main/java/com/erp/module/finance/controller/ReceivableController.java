@@ -48,6 +48,8 @@ public class ReceivableController {
         request.setStatus(status);
         request.setStartDate(startDate != null ? java.time.LocalDate.parse(startDate) : null);
         request.setEndDate(endDate != null ? java.time.LocalDate.parse(endDate) : null);
+        request.setPage(page);
+        request.setSize(size);
 
         PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request, currentUser());
         return Result.success(result);
@@ -82,6 +84,7 @@ public class ReceivableController {
     @PostMapping("/{id}/settle")
     public Result<ReceivableDtos.SettleResponse> settle(@PathVariable Long id,
                                                       @RequestBody ReceivableDtos.SettleRequest request) {
+        authorizationService.requireFinanceAccess(currentUser());
         request.setReceivableId(id);
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
         ReceivableDtos.SettleResponse response = receivableService.settleReceivable(request, currentUser);
@@ -94,6 +97,7 @@ public class ReceivableController {
     @PostMapping("/batch-settle")
     public Result<Void> batchSettle(@RequestBody ReceivableDtos.BatchSettleRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+        authorizationService.requireFinanceAccess(currentUser);
         receivableService.batchSettle(request, currentUser);
         return Result.success();
     }

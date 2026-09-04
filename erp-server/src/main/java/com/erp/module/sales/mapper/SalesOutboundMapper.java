@@ -33,6 +33,20 @@ public interface SalesOutboundMapper extends BaseMapper<SalesOutbound> {
     @Select("SELECT * FROM sales_outbound WHERE warehouse_id = #{warehouseId} ORDER BY biz_date DESC, id DESC")
     List<SalesOutbound> selectByWarehouseId(@Param("warehouseId") Long warehouseId);
 
+    @Select("SELECT o.* FROM sales_outbound o " +
+            "JOIN sales_order s ON s.id = o.order_id " +
+            "WHERE o.biz_date BETWEEN #{startDate} AND #{endDate} " +
+            "AND o.status = 'AUDITED' AND s.salesperson_id = #{salespersonId} " +
+            "ORDER BY o.biz_date DESC, o.id DESC")
+    List<SalesOutbound> selectAuditedByDateRangeAndSalesperson(@Param("startDate") LocalDate startDate,
+                                                                  @Param("endDate") LocalDate endDate,
+                                                                  @Param("salespersonId") Long salespersonId);
+
+    /** 查询指定日期范围内已审核的出库单，供报表使用。 */
+    @Select("SELECT * FROM sales_outbound WHERE biz_date BETWEEN #{startDate} AND #{endDate} " +
+            "AND status = 'AUDITED' ORDER BY biz_date DESC, id DESC")
+    List<SalesOutbound> selectAuditedByDateRange(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
     /**
      * 查询指定日期范围内的出库单
      */
@@ -63,12 +77,13 @@ public interface SalesOutboundMapper extends BaseMapper<SalesOutbound> {
     /**
      * 查询已审核未收款的数量
      */
-    @Select("SELECT COUNT(*) FROM sales_outbound WHERE status = 'AUDITED' AND " +
-            "id NOT IN (SELECT outbound_id FROM receipt_allocation)")
+    @Select("SELECT COUNT(*) FROM sales_outbound o WHERE o.status = 'AUDITED' AND NOT EXISTS (" +
+            "SELECT 1 FROM receivable r WHERE r.doc_type = 'SALES_OUT' AND r.doc_id = o.id AND r.remaining_amount > 0)")
     int countUnpaidOutbounds();
 
     @Select("SELECT COUNT(*) FROM sales_outbound o JOIN sales_order s ON s.id = o.order_id " +
-            "WHERE o.status = 'AUDITED' AND o.id NOT IN (SELECT outbound_id FROM receipt_allocation) " +
+            "WHERE o.status = 'AUDITED' AND NOT EXISTS (" +
+            "SELECT 1 FROM receivable r WHERE r.doc_type = 'SALES_OUT' AND r.doc_id = o.id AND r.remaining_amount > 0) " +
             "AND s.salesperson_id = #{salespersonId}")
     int countUnpaidOutboundsBySalesperson(@Param("salespersonId") Long salespersonId);
 

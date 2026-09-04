@@ -12,6 +12,7 @@ import com.erp.module.purchase.mapper.PurchaseInboundItemMapper;
 import com.erp.module.purchase.mapper.PurchaseInboundMapper;
 import com.erp.module.sales.entity.SalesOutbound;
 import com.erp.module.sales.entity.SalesOutboundItem;
+import com.erp.module.sales.entity.SalesOrder;
 import com.erp.module.sales.mapper.SalesOutboundMapper;
 import com.erp.module.sales.mapper.SalesOutboundItemMapper;
 import com.erp.module.sales.mapper.SalesOrderMapper;
@@ -65,61 +66,52 @@ public class ReportService {
         if (endDate == null) {
             endDate = LocalDate.now(); // 默认今天
         }
+        if (startDate.isAfter(endDate)) {
+            throw new com.erp.common.BusinessException("报表日期范围无效");
+        // 在数据库侧限定已审核及销售员范围，避免先取全量数据后过滤造成越权。
+        List<SalesOutbound> outbounds = request.getSalespersonId() == null
+                ? outboundMapper.selectAuditedByDateRange(startDate, endDate)
+                : outboundMapper.selectAuditedByDateRangeAndSalesperson(startDate, endDate, request.getSalespersonId());
+        outbounds = outbounds.stream()
+                .filter(outbound -> request.getCustomerId() == null || request.getCustomerId().equals(outbound.getCustomerId()))
+                .toList();
 
-        // 查询日期范围内的出库单
-        List<SalesOutbound> outbounds = outboundMapper.selectByDateRange(startDate, endDate);
+        Map<Long, SalesOrder> ordersById = salesOrderMapper.selectBatchIds(outbounds.stream()
+                        .map(SalesOutbound::getOrderId).filter(Objects::nonNull).distinct().toList())
+                .stream().collect(Collectors.toMap(SalesOrder::getId, o -> o));
+        Map<Long, Customer> customersById = customerMapper.selectBatchIds(outbounds.stream()
+                        .map(SalesOutbound::getCustomerId).filter(Objects::nonNull).distinct().toList())
+                .stream().collect(Collectors.toMap(Customer::getId, c -> c));
+        Map<Long, List<SalesOutboundItem>> itemsByOutboundId = outbounds.isEmpty() ? Collections.emptyMap()
+                : outboundItemMapper.selectByOutboundIds(outbounds.stream().map(SalesOutbound::getId).toList())
+                .stream().collect(Collectors.groupingBy(SalesOutboundItem::getOutboundId));
 
-        // 按日期分组
         Map<LocalDate, List<SalesOutbound>> dateGroup = outbounds.stream()
                 .collect(Collectors.groupingBy(SalesOutbound::getBizDate));
-
         List<ReportDtos.SalesDailyReportResponse> responses = new ArrayList<>();
-
-        for (LocalDate date : dateGroup.keySet().stream().sorted().collect(Collectors.toList())) {
+        for (LocalDate date : dateGroup.keySet().stream().sorted().toList()) {
             ReportDtos.SalesDailyReportResponse response = new ReportDtos.SalesDailyReportResponse();
             response.setReportDate(date);
-
-            List<SalesOutbound> dayOutbounds = dateGroup.get(date).stream()
-                    .filter(outbound -> request.getCustomerId() == null || request.getCustomerId().equals(outbound.getCustomerId()))
-                    .filter(outbound -> request.getSalespersonId() == null || hasSalesperson(outbound, request.getSalespersonId()))
-                    .filter(outbound -> "AUDITED".equals(outbound.getStatus()))
-                    .toList();
-            Long totalOrders = (long) dayOutbounds.size();
-
+            List<SalesOutbound> dayOutbounds = dateGroup.get(date);
             BigDecimal totalAmount = BigDecimal.ZERO;
             BigDecimal shippedAmount = BigDecimal.ZERO;
             List<ReportDtos.SalesDailyReportItem> items = new ArrayList<>();
-
             for (SalesOutbound outbound : dayOutbounds) {
                 ReportDtos.SalesDailyReportItem item = new ReportDtos.SalesDailyReportItem();
-                item.setDocNo(outbound.getDocNo());
-                item.setBusinessDate(outbound.getBizDate());
-                item.setAmount(outbound.getTotalAmount());
-                totalAmount = totalAmount.add(outbound.getTotalAmount());
-
-                // 获取客户信息
-                Customer customer = customerMapper.selectById(outbound.getCustomerId());
-                item.setCustomerName(customer != null ? customer.getName() : "");
-
-                // 获取出库明细计算已发货金额
-                List<SalesOutboundItem> outboundItems = outboundItemMapper.selectByOutboundId(outbound.getId());
-                BigDecimal dayShippedAmount = outboundItems.stream()
-                        .map(SalesOutboundItem::getAmount)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                item.setShippedAmount(dayShippedAmount);
-                shippedAmount = shippedAmount.add(dayShippedAmount);
-
-                item.setStatus(outbound.getStatus());
-                items.add(item);
+                item.setDocNo(outbound.getDocNo()); item.setBusinessDate(outbound.getBizDate());
+                BigDecimal amount = safe(outbound.getTotalAmount()); item.setAmount(amount); totalAmount = totalAmount.add(amount);
+                Customer customer = customersById.get(outbound.getCustomerId());
+                item.setCustomerName(customer == null ? "" : customer.getName());
+                SalesOrder order = ordersById.get(outbound.getOrderId());
+                item.setSalespersonName(order == null ? "" : String.valueOf(order.getSalespersonId()));
+                BigDecimal shipped = itemsByOutboundId.getOrDefault(outbound.getId(), List.of()).stream()
+                        .map(SalesOutboundItem::getAmount).map(ReportService::safe).reduce(BigDecimal.ZERO, BigDecimal::add);
+                item.setShippedAmount(shipped); shippedAmount = shippedAmount.add(shipped);
+                item.setStatus(outbound.getStatus()); items.add(item);
             }
-
-            response.setTotalOrders(totalOrders);
-            response.setTotalAmount(totalAmount);
-            response.setShippedAmount(shippedAmount);
-            response.setOrders(items);
-            responses.add(response);
+            response.setTotalOrders((long) dayOutbounds.size()); response.setTotalAmount(totalAmount);
+            response.setShippedAmount(shippedAmount); response.setOrders(items); responses.add(response);
         }
-
         return responses;
     }
 
@@ -167,8 +159,8 @@ public class ReportService {
                 }
 
                 // 使用截至报表日期的流水结存快照，不读取即时库存表。
-                BigDecimal unitCost = quantity.signum() == 0 ? BigDecimal.ZERO
-                        : safe(snapshot.getBalanceAmount()).divide(quantity, 4, RoundingMode.HALF_UP);
+                BigDecimal unitCost = request.isIncludeCost() && quantity.signum() != 0
+                        ? safe(snapshot.getBalanceAmount()).divide(quantity, 4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
 
                 ReportDtos.InventorySummaryItem item = new ReportDtos.InventorySummaryItem();
                 item.setProductId(productId);
@@ -178,7 +170,7 @@ public class ReportService {
                 item.setWarehouseName(warehouse.getName());
                 item.setQuantity(quantity);
                 item.setUnitCost(unitCost);
-                BigDecimal totalValueForItem = safe(snapshot.getBalanceAmount());
+                BigDecimal totalValueForItem = request.isIncludeCost() ? safe(snapshot.getBalanceAmount()) : BigDecimal.ZERO;
                 item.setTotalValue(totalValueForItem);
 
                 items.add(item);
@@ -205,25 +197,28 @@ public class ReportService {
         if (endDate == null) {
             endDate = LocalDate.now(); // 默认今天
         }
+        if (startDate.isAfter(endDate)) {
+            throw new com.erp.common.BusinessException("报表日期范围无效");
+        }
 
         ReportDtos.FinanceSummaryResponse response = new ReportDtos.FinanceSummaryResponse();
         response.setReportDate(endDate);
 
         // 计算销售额（从已审核的出库单统计）
-        BigDecimal totalSales = outboundMapper.selectList(Wrappers.<SalesOutbound>lambdaQuery()
-                        .eq(SalesOutbound::getStatus, "AUDITED")
-                        .between(SalesOutbound::getBizDate, startDate, endDate))
-                .stream()
-                .map(SalesOutbound::getTotalAmount)
+        List<SalesOutbound> salesOutbounds = request.getSalespersonId() == null
+                ? outboundMapper.selectAuditedByDateRange(startDate, endDate)
+                : outboundMapper.selectAuditedByDateRangeAndSalesperson(startDate, endDate, request.getSalespersonId());
+        BigDecimal totalSales = salesOutbounds.stream()
+                .map(SalesOutbound::getTotalAmount).map(ReportService::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算采购额（从采购入库单统计，这里需要添加相应的查询）
-        BigDecimal totalPurchases = purchaseInboundMapper.selectByDateRange(startDate.toString(), endDate.toString()).stream()
-                .filter(doc -> "AUDITED".equals(doc.getStatus()))
+        List<com.erp.module.purchase.entity.PurchaseInbound> inbounds = purchaseInboundMapper.selectByDateRange(startDate.toString(), endDate.toString()).stream()
+                .filter(doc -> "AUDITED".equals(doc.getStatus())).toList();
+        BigDecimal totalPurchases = inbounds.stream()
                 .flatMap(doc -> purchaseInboundItemMapper.selectList(Wrappers.<com.erp.module.purchase.entity.PurchaseInboundItem>lambdaQuery()
                         .eq(com.erp.module.purchase.entity.PurchaseInboundItem::getInboundId, doc.getId())).stream())
-                .map(com.erp.module.purchase.entity.PurchaseInboundItem::getAmount)
-                .filter(java.util.Objects::nonNull)
+                .map(com.erp.module.purchase.entity.PurchaseInboundItem::getAmount).map(ReportService::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算应收账款余额
@@ -248,8 +243,8 @@ public class ReportService {
         // 计算库存总值
         BigDecimal totalInventory = getInventoryTotalValue(endDate);
 
-        // 计算净利润
-        BigDecimal netProfit = totalSales.subtract(totalPurchases);
+        // 当前出库明细没有成本快照字段，不能用销售额减采购额冒充毛利。
+        BigDecimal netProfit = null;
 
         response.setTotalSales(totalSales);
         response.setTotalPurchases(totalPurchases);
@@ -257,6 +252,7 @@ public class ReportService {
         response.setTotalPayables(totalPayables);
         response.setTotalInventory(totalInventory);
         response.setNetProfit(netProfit);
+        response.setCostDataAvailable(false);
 
         return response;
     }

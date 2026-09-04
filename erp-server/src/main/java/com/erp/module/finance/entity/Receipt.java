@@ -18,6 +18,8 @@ public class Receipt {
     private String docNo;
     /** 客户端幂等键，重试同一收款请求返回原单。 */
     private String idempotencyKey;
+    /** 请求内容稳定摘要，用于检测同一幂等键被复用为不同请求。 */
+    private String idempotencyFingerprint;
     private Long customerId;
     private LocalDate bizDate;
     private BigDecimal amount;

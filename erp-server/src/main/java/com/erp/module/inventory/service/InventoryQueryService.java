@@ -13,6 +13,8 @@ import com.erp.module.masterdata.entity.Product;
 import com.erp.module.masterdata.entity.Warehouse;
 import com.erp.module.masterdata.mapper.ProductMapper;
 import com.erp.module.masterdata.mapper.WarehouseMapper;
+import com.erp.module.system.TokenStore;
+import com.erp.module.system.service.SystemAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -30,9 +32,12 @@ public class InventoryQueryService {
     private final InventoryLedgerMapper ledgerMapper;
     private final ProductMapper productMapper;
     private final WarehouseMapper warehouseMapper;
+    private final SystemAuthorizationService authorizationService;
 
     public PageResult<InventoryQueryDtos.StockResponse> stocks(Long warehouseId, Long productId, Long categoryId,
-                                                               long page, long size) {
+                                                               long page, long size,
+                                                               TokenStore.LoginUser user) {
+        boolean canViewCost = authorizationService.requireInventoryQueryAccess(user);
         long safePage = Math.max(page, 1), safeSize = Math.max(size, 1);
         Page<Inventory> result;
         if (categoryId != null) {
@@ -70,16 +75,19 @@ public class InventoryQueryService {
             dto.setProductName(p == null ? "" : p.getName()); dto.setProductSpec(p == null ? "" : p.getSpec());
             dto.setCategoryId(p == null ? null : p.getCategoryId()); dto.setWarehouseId(row.getWarehouseId());
             dto.setWarehouseName(w == null ? "" : w.getName()); dto.setQuantity(row.getQty());
-            dto.setUnitCost(row.getQty() == null || row.getQty().signum() == 0 ? java.math.BigDecimal.ZERO
-                    : row.getTotalCost().divide(row.getQty(), 4, java.math.RoundingMode.HALF_UP));
-            dto.setTotalValue(row.getTotalCost()); return dto;
+            dto.setUnitCost(canViewCost && row.getQty() != null && row.getQty().signum() != 0
+                    ? row.getTotalCost().divide(row.getQty(), 4, java.math.RoundingMode.HALF_UP)
+                    : canViewCost ? java.math.BigDecimal.ZERO : null);
+            dto.setTotalValue(canViewCost ? row.getTotalCost() : null); return dto;
         }).toList();
         return PageResult.of(result.getTotal(), records);
     }
 
     public PageResult<InventoryQueryDtos.LedgerResponse> ledgers(Long warehouseId, Long productId, String docType,
                                                                   LocalDate startDate, LocalDate endDate,
-                                                                  long page, long size) {
+                                                                  long page, long size,
+                                                                  TokenStore.LoginUser user) {
+        boolean canViewCost = authorizationService.requireInventoryQueryAccess(user);
         if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
             throw new BusinessException(400, "开始日期不能晚于结束日期");
         }
@@ -106,8 +114,8 @@ public class InventoryQueryService {
             dto.setId(row.getId()); dto.setDocType(row.getDocType()); dto.setDocId(row.getDocId()); dto.setDocNo(row.getDocNo());
             dto.setProductId(row.getProductId()); dto.setProductName(p == null ? "" : p.getName()); dto.setWarehouseId(row.getWarehouseId());
             dto.setWarehouseName(w == null ? "" : w.getName()); dto.setDirection(row.getDirection()); dto.setQuantity(row.getQty());
-            dto.setUnitCost(row.getUnitCost()); dto.setAmount(row.getAmount()); dto.setBalanceQuantity(row.getBalanceQty());
-            dto.setBalanceAmount(row.getBalanceAmount()); dto.setBizDate(row.getBizDate()); dto.setCreatedAt(row.getCreatedAt()); return dto;
+            dto.setUnitCost(canViewCost ? row.getUnitCost() : null); dto.setAmount(canViewCost ? row.getAmount() : null); dto.setBalanceQuantity(row.getBalanceQty());
+            dto.setBalanceAmount(canViewCost ? row.getBalanceAmount() : null); dto.setBizDate(row.getBizDate()); dto.setCreatedAt(row.getCreatedAt()); return dto;
         }).toList();
         return PageResult.of(result.getTotal(), records);
     }

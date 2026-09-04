@@ -27,6 +27,8 @@ public class ReceivableDtos {
         private String status;
         private LocalDate startDate;
         private LocalDate endDate;
+        private Long page = 1L;
+        private Long size = 10L;
     }
 
     /**

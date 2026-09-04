@@ -23,6 +23,12 @@ public class Receivable {
 
     private String docNo;
 
+    @TableField("doc_type")
+    private String docType;
+
+    @TableField("doc_id")
+    private Long docId;
+
     private Long orderId;
 
     private String orderDocNo;
