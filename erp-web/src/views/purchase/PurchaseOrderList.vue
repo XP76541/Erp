@@ -163,7 +163,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { purchaseOrderApi } from '@/api/purchase'
-import { supplierApi as masterSupplierApi } from '@/api/masterdata'
+import { supplierApi } from '@/api/supplier'
 import PurchaseOrderForm from './components/PurchaseOrderForm.vue'
 
 const loading = ref(false)
@@ -216,8 +216,8 @@ const rejectRules = {
 // 获取供应商列表
 const getSuppliers = async () => {
   try {
-    const response = await supplierApi.list()
-    suppliers.value = response.data || []
+    const response = await supplierApi.page({ page: 1, size: 200 })
+    suppliers.value = response.records || []
   } catch (error) {
     console.error('获取供应商列表失败:', error)
   }
@@ -233,8 +233,8 @@ const getPurchaseOrders = async () => {
       ...searchForm.value
     }
     const response = await purchaseOrderApi.list(params)
-    tableData.value = response.data.records || []
-    pagination.value.total = response.data.total || 0
+    tableData.value = response.records || []
+    pagination.value.total = response.total || 0
   } catch (error) {
     console.error('获取采购订单列表失败:', error)
     ElMessage.error('获取采购订单列表失败')

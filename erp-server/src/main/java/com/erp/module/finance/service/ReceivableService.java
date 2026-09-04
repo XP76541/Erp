@@ -189,7 +189,8 @@ public class ReceivableService {
             throw new BusinessException("核销金额必须大于0");
         }
 
-        if (request.getAmount().compareTo(receivable.getRemainingAmount()) > 0) {
+        if (request.getAmount().compareTo(request.getAmount() == null ? BigDecimal.ZERO :
+                (receivable.getRemainingAmount() == null ? BigDecimal.ZERO : receivable.getRemainingAmount())) > 0) {
             throw new BusinessException("核销金额不能超过剩余金额");
         }
 
@@ -335,15 +336,18 @@ public class ReceivableService {
         // 计算汇总数据
         BigDecimal totalReceivable = receivables.stream()
                 .map(Receivable::getAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalPaid = receivables.stream()
                 .map(Receivable::getPaidAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalOverdue = receivables.stream()
                 .filter(r -> overdueDays.apply(r) > 0)
                 .map(Receivable::getRemainingAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Integer countUnsettled = (int) receivables.stream()
@@ -360,6 +364,7 @@ public class ReceivableService {
                         receivables.stream()
                 .filter(r -> overdueDays.apply(r) <= 0)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
                 .filter(r -> overdueDays.apply(r) <= 0)
@@ -368,6 +373,7 @@ public class ReceivableService {
                         receivables.stream()
                                 .filter(r -> overdueDays.apply(r) > 0 && overdueDays.apply(r) <= 30)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
                                 .filter(r -> overdueDays.apply(r) > 0 && overdueDays.apply(r) <= 30)
@@ -376,6 +382,7 @@ public class ReceivableService {
                         receivables.stream()
                                 .filter(r -> overdueDays.apply(r) > 30 && overdueDays.apply(r) <= 60)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
                                 .filter(r -> overdueDays.apply(r) > 30 && overdueDays.apply(r) <= 60)
@@ -384,6 +391,7 @@ public class ReceivableService {
                         receivables.stream()
                                 .filter(r -> overdueDays.apply(r) > 60 && overdueDays.apply(r) <= 90)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
                                 .filter(r -> overdueDays.apply(r) > 60 && overdueDays.apply(r) <= 90)
@@ -392,6 +400,7 @@ public class ReceivableService {
                         receivables.stream()
                                 .filter(r -> overdueDays.apply(r) > 90)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
                                 .filter(r -> overdueDays.apply(r) > 90)
@@ -468,6 +477,10 @@ public class ReceivableService {
 
         return new ReceivableDtos.StatementResponse(customerId, customer.getName(), endDate,
                 openingBalance, currentReceivables, payments, adjustments, closingBalance, details);
+    }
+
+    public Receivable getReceivableEntity(Long id) {
+        return receivableMapper.selectById(id);
     }
 
     private List<Long> scopedCustomerIds(TokenStore.LoginUser user) {

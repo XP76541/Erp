@@ -68,6 +68,7 @@ public class ReportService {
         }
         if (startDate.isAfter(endDate)) {
             throw new com.erp.common.BusinessException("报表日期范围无效");
+        }
         // 在数据库侧限定已审核及销售员范围，避免先取全量数据后过滤造成越权。
         List<SalesOutbound> outbounds = request.getSalespersonId() == null
                 ? outboundMapper.selectAuditedByDateRange(startDate, endDate)
@@ -76,10 +77,12 @@ public class ReportService {
                 .filter(outbound -> request.getCustomerId() == null || request.getCustomerId().equals(outbound.getCustomerId()))
                 .toList();
 
-        Map<Long, SalesOrder> ordersById = salesOrderMapper.selectBatchIds(outbounds.stream()
+        Map<Long, SalesOrder> ordersById = outbounds.isEmpty() ? Collections.emptyMap()
+                : salesOrderMapper.selectBatchIds(outbounds.stream()
                         .map(SalesOutbound::getOrderId).filter(Objects::nonNull).distinct().toList())
                 .stream().collect(Collectors.toMap(SalesOrder::getId, o -> o));
-        Map<Long, Customer> customersById = customerMapper.selectBatchIds(outbounds.stream()
+        Map<Long, Customer> customersById = outbounds.isEmpty() ? Collections.emptyMap()
+                : customerMapper.selectBatchIds(outbounds.stream()
                         .map(SalesOutbound::getCustomerId).filter(Objects::nonNull).distinct().toList())
                 .stream().collect(Collectors.toMap(Customer::getId, c -> c));
         Map<Long, List<SalesOutboundItem>> itemsByOutboundId = outbounds.isEmpty() ? Collections.emptyMap()

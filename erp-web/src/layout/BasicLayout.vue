@@ -118,6 +118,7 @@ import {
   Wallet,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { authApi } from '@/api/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -134,6 +135,11 @@ const visibleChildren = (group: string) =>
 
 async function handleCommand(command: string) {
   if (command === 'logout') {
+    try {
+      await authApi.logout()
+    } catch {
+      // Local session must still be cleared if the server is unavailable.
+    }
     userStore.logout()
     await router.push('/login')
   }

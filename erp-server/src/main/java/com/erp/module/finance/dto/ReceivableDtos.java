@@ -5,6 +5,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.Valid;
 import lombok.Data;
@@ -207,7 +208,11 @@ public class ReceivableDtos {
      */
     @Data
     public static class SettleRequest {
+        @NotNull(message = "应收账款不能为空")
         private Long receivableId;
+        @NotNull(message = "核销金额不能为空")
+        @Digits(integer = 16, fraction = 2, message = "核销金额最多两位小数")
+        @DecimalMin(value = "0.01", message = "核销金额必须大于0")
         private BigDecimal amount;
         private String paymentMethod;
         private String remark;
@@ -218,6 +223,8 @@ public class ReceivableDtos {
      */
     @Data
     public static class BatchSettleRequest {
+        @NotEmpty(message = "批量核销明细不能为空")
+        @Valid
         private List<SettleRequest> settlements;
         private String batchNo;
     }

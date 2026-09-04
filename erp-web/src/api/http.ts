@@ -31,6 +31,10 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
   (response) => {
+    // 文件下载使用 Blob，不尝试按统一 JSON 响应解包。
+    if (response.config.responseType === 'blob' || response.data instanceof Blob) {
+      return response.data as never
+    }
     const body = response.data as ApiBody<unknown>
     if (body && typeof body === 'object' && 'code' in body) {
       if (body.code !== 0) {
