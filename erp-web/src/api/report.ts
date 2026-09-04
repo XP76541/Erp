@@ -61,7 +61,8 @@ export interface FinanceSummaryResponse {
   totalReceivables: number
   totalPayables: number
   totalInventory: number
-  netProfit: number
+  netProfit: number | null
+  costDataAvailable?: boolean
 }
 
 export const salesDailyReportApi = {

@@ -252,6 +252,26 @@ export const inventoryCheckApi = {
 
 // ==================== 库存预警相关 ====================
 
+export interface InventoryWarning {
+  id: number
+  warningType: string
+  warehouseId: number
+  productId: number
+  currentQty: number
+  warningValue: number
+  createdAt: string
+  productName: string
+  warehouseName: string
+}
+
+export interface InventoryWarningStats {
+  stockOutCount: number
+  stockOverCount: number
+  expiringCount: number
+  spoiledCount: number
+  totalAmount: number
+}
+
 export const inventoryWarningApi = {
   // 分页查询库存预警
   getWarningList: (params: {

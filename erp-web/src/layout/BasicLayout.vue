@@ -1,7 +1,10 @@
 <template>
   <el-container class="layout">
     <el-aside width="220px" class="aside">
-      <div class="logo">贸易 ERP</div>
+      <div class="logo">
+        <span class="logo-mark">贸</span>
+        <span>贸易 ERP</span>
+      </div>
       <el-menu
         :default-active="route.path"
         router
@@ -149,48 +152,122 @@ async function handleCommand(command: string) {
 <style scoped>
 .layout {
   height: 100%;
+  background: var(--erp-page);
 }
 
 .aside {
-  background: #001529;
+  overflow: hidden;
+  background: #172a35;
+  box-shadow: 2px 0 12px rgba(20, 36, 45, 0.08);
 }
 
 .logo {
-  height: 60px;
-  line-height: 60px;
-  text-align: center;
-  color: #fff;
-  font-size: 18px;
+  display: flex;
+  height: 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 22px;
+  color: #f5fafb;
+  font-size: 17px;
   font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.logo-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 6px;
+  color: #173746;
+  background: #c8e0e5;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .aside :deep(.el-menu) {
+  padding: 10px 8px;
   border-right: none;
+  background: transparent;
+}
+
+.aside :deep(.el-menu-item),
+.aside :deep(.el-sub-menu__title) {
+  height: 42px;
+  margin: 2px 0;
+  border-radius: 6px;
+  color: #b7c5cb;
+}
+
+.aside :deep(.el-menu-item:hover),
+.aside :deep(.el-sub-menu__title:hover) {
+  color: #f4fbfc;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.aside :deep(.el-menu-item.is-active) {
+  color: #fff;
+  background: #2f6f8f;
+}
+
+.aside :deep(.el-sub-menu .el-menu-item) {
+  min-width: 0;
+  padding-left: 52px !important;
+  background: transparent;
 }
 
 .header {
   display: flex;
+  height: 64px;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  padding: 0 28px;
+  background: var(--erp-surface);
+  border-bottom: 1px solid var(--erp-border);
 }
 
 .header-title {
+  color: var(--erp-text);
   font-size: 16px;
-  color: #303133;
+  font-weight: 600;
 }
 
 .user {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: #5d6b76;
   cursor: pointer;
-  color: #606266;
+  transition: background 0.2s;
+}
+
+.user:hover {
+  background: #f2f5f6;
 }
 
 .main {
-  background: #f0f2f5;
+  overflow: auto;
+  padding: 24px 28px;
+  background: var(--erp-page);
+}
+
+@media (max-width: 800px) {
+  .aside { width: 190px !important; }
+  .main { padding: 18px; }
+  .header { padding: 0 18px; }
+}
+
+@media (max-width: 560px) {
+  .aside { width: 64px !important; }
+  .logo { justify-content: center; padding: 0; }
+  .logo > span:last-child,
+  .aside :deep(.el-menu-item span),
+  .aside :deep(.el-sub-menu__title span),
+  .aside :deep(.el-sub-menu__icon-arrow) { display: none; }
+  .aside :deep(.el-menu-item),
+  .aside :deep(.el-sub-menu__title) { justify-content: center; padding: 0 !important; }
 }
 </style>
