@@ -10,8 +10,10 @@ import com.erp.module.masterdata.mapper.ProductMapper;
 import com.erp.module.masterdata.mapper.WarehouseMapper;
 import com.erp.module.inventory.entity.InventoryWarning;
 import com.erp.module.inventory.entity.InventoryWarningConfig;
+import com.erp.module.inventory.entity.InventoryWarningLog;
 import com.erp.module.inventory.mapper.InventoryWarningMapper;
 import com.erp.module.inventory.mapper.InventoryWarningConfigMapper;
+import com.erp.module.inventory.mapper.InventoryWarningLogMapper;
 import com.erp.module.inventory.dto.InventoryWarningDtos;
 import com.erp.module.system.TokenStore;
 import org.springframework.stereotype.Service;
@@ -31,17 +33,20 @@ public class InventoryWarningService {
 
     private final InventoryWarningMapper warningMapper;
     private final InventoryWarningConfigMapper configMapper;
+    private final InventoryWarningLogMapper warningLogMapper;
     private final WarehouseMapper warehouseMapper;
     private final ProductMapper productMapper;
     private final InventoryService inventoryService;
 
     public InventoryWarningService(InventoryWarningMapper warningMapper,
                                   InventoryWarningConfigMapper configMapper,
+                                  InventoryWarningLogMapper warningLogMapper,
                                   WarehouseMapper warehouseMapper,
                                   ProductMapper productMapper,
                                   InventoryService inventoryService) {
         this.warningMapper = warningMapper;
         this.configMapper = configMapper;
+        this.warningLogMapper = warningLogMapper;
         this.warehouseMapper = warehouseMapper;
         this.productMapper = productMapper;
         this.inventoryService = inventoryService;
@@ -355,13 +360,35 @@ public class InventoryWarningService {
     }
 
     private List<InventoryWarningDtos.WarningLog> getWarningLogs(Long warningId) {
-        // TODO: 需要实现 InventoryWarningLogMapper 和查询方法
-        // 暂时返回空列表
-        return List.of();
+        return warningLogMapper.selectByWarningId(warningId).stream()
+                .map(this::toWarningLog)
+                .collect(Collectors.toList());
     }
 
     private void addWarningLog(InventoryWarningDtos.WarningLog log) {
-        // TODO: 需要实现 InventoryWarningLog 的保存方法
+        InventoryWarningLog entity = new InventoryWarningLog();
+        entity.setWarningId(log.getWarningId());
+        entity.setOldQty(log.getOldQty());
+        entity.setNewQty(log.getNewQty());
+        entity.setOperatorId(log.getOperatorId());
+        entity.setOperationTime(log.getOperationTime());
+        entity.setOperationType(log.getOperationType());
+        entity.setRemark(log.getRemark());
+        warningLogMapper.insert(entity);
+        log.setId(entity.getId());
+    }
+
+    private InventoryWarningDtos.WarningLog toWarningLog(InventoryWarningLog entity) {
+        InventoryWarningDtos.WarningLog log = new InventoryWarningDtos.WarningLog();
+        log.setId(entity.getId());
+        log.setWarningId(entity.getWarningId());
+        log.setOldQty(entity.getOldQty());
+        log.setNewQty(entity.getNewQty());
+        log.setOperatorId(entity.getOperatorId());
+        log.setOperationTime(entity.getOperationTime());
+        log.setOperationType(entity.getOperationType());
+        log.setRemark(entity.getRemark());
+        return log;
     }
 
     private InventoryWarning requireWarning(Long id) {

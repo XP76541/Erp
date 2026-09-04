@@ -4,8 +4,11 @@ import com.erp.common.Result;
 import com.erp.common.PageResult;
 import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.service.ReceivableService;
+import com.erp.module.finance.service.ReceiptService;
+import com.erp.module.system.service.SystemAuthorizationService;
 import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.system.TokenStore;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 import java.math.BigDecimal;
@@ -21,6 +24,8 @@ import java.util.List;
 public class ReceivableController {
 
     private final ReceivableService receivableService;
+    private final ReceiptService receiptService;
+    private final SystemAuthorizationService authorizationService;
 
     private TokenStore.LoginUser currentUser() {
         return TokenStore.getCurrentLoginUser();
@@ -67,9 +72,13 @@ public class ReceivableController {
         return Result.success(count);
     }
 
-    /**
-     * 收款核销
-     */
+    /** 客户收款多单核销 */
+    @PostMapping("/receipts")
+    public Result<ReceivableDtos.ReceiptResponse> createReceipt(@Valid @RequestBody ReceivableDtos.ReceiptCreateRequest request) {
+        authorizationService.requireFinanceAccess(currentUser());
+        return Result.success(receiptService.createAndAllocate(request, currentUser()));
+    }
+
     @PostMapping("/{id}/settle")
     public Result<ReceivableDtos.SettleResponse> settle(@PathVariable Long id,
                                                       @RequestBody ReceivableDtos.SettleRequest request) {
@@ -141,7 +150,8 @@ public class ReceivableController {
         ReceivableDtos.StatementResponse statement = receivableService.generateStatement(
                 customerId,
                 java.time.LocalDate.parse(startDate),
-                java.time.LocalDate.parse(endDate));
+                java.time.LocalDate.parse(endDate),
+                currentUser());
         return Result.success(statement);
     }
 

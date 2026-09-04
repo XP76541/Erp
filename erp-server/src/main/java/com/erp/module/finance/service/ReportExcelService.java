@@ -1,6 +1,7 @@
 package com.erp.module.finance.service;
 
 import com.erp.module.finance.dto.ReportDtos;
+import com.erp.module.finance.dto.ReceivableDtos;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -42,6 +43,33 @@ public class ReportExcelService {
                 row.createCell(0).setCellValue(item.getProductName()); row.createCell(1).setCellValue(item.getProductSpec());
                 row.createCell(2).setCellValue(item.getWarehouseName()); number(row, 3, item.getQuantity());
                 number(row, 4, item.getUnitCost()); number(row, 5, item.getTotalValue()); }
+        });
+    }
+
+    public byte[] statement(ReceivableDtos.StatementResponse report) {
+        return workbook("客户对账单", wb -> {
+            Sheet sheet = wb.createSheet("客户对账单");
+            Row summary = sheet.createRow(0);
+            summary.createCell(0).setCellValue("客户");
+            summary.createCell(1).setCellValue(report.getCustomerName());
+            summary.createCell(2).setCellValue("截止日期");
+            summary.createCell(3).setCellValue(String.valueOf(report.getStatementDate()));
+            Row totals = sheet.createRow(1);
+            totals.createCell(0).setCellValue("期初余额"); number(totals, 1, report.getOpeningBalance());
+            totals.createCell(2).setCellValue("期末余额"); number(totals, 3, report.getClosingBalance());
+            Row header = sheet.createRow(3);
+            String[] columns = {"日期", "单号", "类型", "金额", "已收/已付", "余额", "状态", "备注"};
+            for (int i = 0; i < columns.length; i++) header.createCell(i).setCellValue(columns[i]);
+            int rowNo = 4;
+            if (report.getDetails() != null) for (var detail : report.getDetails()) {
+                Row row = sheet.createRow(rowNo++);
+                row.createCell(0).setCellValue(String.valueOf(detail.getDate()));
+                row.createCell(1).setCellValue(detail.getDocNo());
+                row.createCell(2).setCellValue(detail.getDocType());
+                number(row, 3, detail.getAmount()); number(row, 4, detail.getPaid());
+                number(row, 5, detail.getRemaining()); row.createCell(6).setCellValue(detail.getStatus());
+                row.createCell(7).setCellValue(detail.getRemark() == null ? "" : detail.getRemark());
+            }
         });
     }
 

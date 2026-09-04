@@ -45,6 +45,14 @@ public class SystemAuthorizationService {
         }
     }
 
+    /** 收付款及核销仅允许财务、管理员或老板操作。 */
+    public void requireFinanceAccess(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS") && !hasRole(user, "FINANCE")) {
+            throw new BusinessException(403, "无收付款及核销权限");
+        }
+    }
+
+
     /** 销售员只能查看本人业务员维度；其他报表角色可按请求筛选。 */
     public Long reportSalespersonScope(TokenStore.LoginUser user) {
         requireReportAccess(user);

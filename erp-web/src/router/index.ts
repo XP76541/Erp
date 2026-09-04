@@ -145,6 +145,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/system/OperationLogList.vue'),
         meta: { title: '操作日志' },
       },
+      {
+        path: 'system/backups',
+        name: 'systemBackups',
+        component: () => import('@/views/system/BackupManagement.vue'),
+        meta: { title: '数据库备份' },
+      },
     ],
   },
 ]

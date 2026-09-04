@@ -27,8 +27,23 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
     /**
      * 获取指定日期范围内的应收账款
      */
-    @Select("SELECT * FROM receivable WHERE business_date BETWEEN #{startDate} AND #{endDate} ORDER BY business_date")
+    @Select("SELECT * FROM receivable WHERE customer_id = #{customerId} " +
+            "AND biz_date BETWEEN #{startDate} AND #{endDate} ORDER BY biz_date")
+    List<Receivable> getByCustomerAndDateRange(@Param("customerId") Long customerId,
+                                               @Param("startDate") LocalDate startDate,
+                                               @Param("endDate") LocalDate endDate);
+
+    @Select("SELECT * FROM receivable WHERE customer_id = #{customerId} " +
+            "AND biz_date < #{beforeDate} ORDER BY biz_date")
+    List<Receivable> getByCustomerBeforeDate(@Param("customerId") Long customerId,
+                                             @Param("beforeDate") LocalDate beforeDate);
+
+    /** 兼容旧调用方；新业务必须使用带客户条件的方法。 */
+    @Select("SELECT * FROM receivable WHERE biz_date BETWEEN #{startDate} AND #{endDate} ORDER BY biz_date")
     List<Receivable> getByDateRange(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    @Select("SELECT * FROM receivable WITH (UPDLOCK, ROWLOCK) WHERE id = #{id}")
+    Receivable selectForUpdate(@Param("id") Long id);
 
     /**
      * 更新付款金额和状态
@@ -49,7 +64,7 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
     @Select("SELECT " +
             "customer_id, " +
             "SUM(amount) as total_amount, " +
-            "SUM(paid_amount) as total_paid, " +
+            "SUM(received_amount) as total_paid, " +
             "SUM(remaining_amount) as total_remaining, " +
             "SUM(CASE WHEN status = 'UNSETTLED' THEN remaining_amount ELSE 0 END) as unsettled_amount, " +
             "SUM(CASE WHEN status = 'PARTIAL' THEN remaining_amount ELSE 0 END) as partial_amount, " +
@@ -71,7 +86,7 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
             "SUM(amount) as total_amount, SUM(received_amount) as total_paid, ",
             "SUM(remaining_amount) as total_remaining ",
             "FROM receivable ",
-            "WHERE remaining_amount > 0 ",
+            "WHERE remaining_amount > 0 AND biz_date &lt;= #{cutoffDate} ",
             "<if test='customerIds != null and customerIds.size() > 0'>",
             "AND customer_id IN ",
             "<foreach collection='customerIds' item='customerId' open='(' separator=',' close=')'>#{customerId}</foreach>",
@@ -94,7 +109,7 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
     /** 获取截止日期前的逾期应收账款。 */
     @Select({"<script>",
             "SELECT * FROM receivable ",
-            "WHERE due_date &lt; #{cutoffDate} AND remaining_amount > 0 ",
+            "WHERE due_date &lt; #{cutoffDate} AND biz_date &lt;= #{cutoffDate} AND remaining_amount > 0 ",
             "<if test='customerIds != null and customerIds.size() > 0'>",
             "AND customer_id IN ",
             "<foreach collection='customerIds' item='customerId' open='(' separator=',' close=')'>#{customerId}</foreach>",

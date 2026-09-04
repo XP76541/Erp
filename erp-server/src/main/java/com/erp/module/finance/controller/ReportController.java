@@ -90,7 +90,8 @@ public class ReportController {
         List<ReportDtos.SalesDailyReportResponse> data = reportService.getSalesDailyReport(request);
 
         byte[] bytes = excelService.salesDaily(data);
-        return download(bytes, "销售日报表_" + java.time.LocalDate.now() + ".xlsx");
+        java.time.LocalDate reportDate = endDate == null ? java.time.LocalDate.now() : java.time.LocalDate.parse(endDate);
+        return download(bytes, "销售日报表_" + reportDate + ".xlsx");
     }
 
     /**
@@ -111,7 +112,7 @@ public class ReportController {
         ReportDtos.InventorySummaryResponse data = reportService.getInventorySummary(request);
 
         byte[] bytes = excelService.inventorySummary(data);
-        return download(bytes, "进销存汇总表_" + java.time.LocalDate.now() + ".xlsx");
+        return download(bytes, "进销存汇总表_" + data.getReportDate() + ".xlsx");
     }
 
     /**
@@ -130,7 +131,7 @@ public class ReportController {
         ReportDtos.FinanceSummaryResponse data = reportService.getFinanceSummary(request);
 
         byte[] bytes = excelService.financeSummary(data);
-        return download(bytes, "财务汇总表_" + java.time.LocalDate.now() + ".xlsx");
+        return download(bytes, "财务汇总表_" + data.getReportDate() + ".xlsx");
     }
 
     private ResponseEntity<byte[]> download(byte[] bytes, String fileName) {

@@ -3,8 +3,13 @@ package com.erp.module.finance.controller;
 import com.erp.common.Result;
 import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.finance.service.StatementAdjustmentService;
+import com.erp.module.finance.service.ReportExcelService;
 import com.erp.module.system.TokenStore;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDate;
@@ -19,12 +24,13 @@ import java.util.List;
 public class StatementAdjustmentController {
 
     private final StatementAdjustmentService adjustmentService;
+    private final ReportExcelService reportExcelService;
 
     /**
      * 创建对账单调整
      */
     @PostMapping
-    public Result<Long> create(@RequestBody ReceivableDtos.StatementAdjustmentRequest request) {
+    public Result<Long> create(@jakarta.validation.Valid @RequestBody ReceivableDtos.StatementAdjustmentRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
         Long id = adjustmentService.createAdjustment(request, currentUser);
         return Result.ok(id);
@@ -42,7 +48,7 @@ public class StatementAdjustmentController {
         LocalDate start = startDate != null ? LocalDate.parse(startDate) : null;
         LocalDate end = endDate != null ? LocalDate.parse(endDate) : null;
 
-        List<ReceivableDtos.StatementAdjustmentResponse> adjustments = adjustmentService.getAdjustmentsByCustomer(customerId, start, end);
+        List<ReceivableDtos.StatementAdjustmentResponse> adjustments = adjustmentService.getAdjustmentsByCustomer(customerId, start, end, TokenStore.getCurrentLoginUser());
         return Result.ok(adjustments);
     }
 
@@ -51,7 +57,8 @@ public class StatementAdjustmentController {
      */
     @GetMapping("/statement/{statementId}")
     public Result<List<ReceivableDtos.StatementAdjustmentResponse>> getAdjustmentsByStatement(@PathVariable Long statementId) {
-        List<ReceivableDtos.StatementAdjustmentResponse> adjustments = adjustmentService.getAdjustmentsByStatement(statementId);
+        List<ReceivableDtos.StatementAdjustmentResponse> adjustments = adjustmentService.getAdjustmentsByStatement(
+                statementId, TokenStore.getCurrentLoginUser());
         return Result.ok(adjustments);
     }
 
@@ -59,7 +66,7 @@ public class StatementAdjustmentController {
      * 更新调整记录
      */
     @PutMapping("/{id}")
-    public Result<Void> update(@PathVariable Long id, @RequestBody ReceivableDtos.StatementAdjustmentRequest request) {
+    public Result<Void> update(@PathVariable Long id, @jakarta.validation.Valid @RequestBody ReceivableDtos.StatementAdjustmentRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
         adjustmentService.updateAdjustment(id, request, currentUser);
         return Result.ok();
@@ -86,7 +93,8 @@ public class StatementAdjustmentController {
         LocalDate start = startDate != null ? LocalDate.parse(startDate) : null;
         LocalDate end = endDate != null ? LocalDate.parse(endDate) : null;
 
-        List<ReceivableDtos.AdjustmentStatisticsResponse> statistics = adjustmentService.getAdjustmentStatistics(start, end);
+        List<ReceivableDtos.AdjustmentStatisticsResponse> statistics = adjustmentService.getAdjustmentStatistics(start, end,
+                TokenStore.getCurrentLoginUser());
         return Result.ok(statistics);
     }
 
@@ -102,7 +110,8 @@ public class StatementAdjustmentController {
         ReceivableDtos.StatementResponse statement = adjustmentService.generateStatementWithAdjustments(
                 customerId,
                 LocalDate.parse(startDate),
-                LocalDate.parse(endDate));
+                LocalDate.parse(endDate),
+                TokenStore.getCurrentLoginUser());
         return Result.ok(statement);
     }
 
@@ -110,14 +119,22 @@ public class StatementAdjustmentController {
      * 导出对账单
      */
     @GetMapping("/export")
-    public Result<String> exportStatement(
+    public ResponseEntity<byte[]> exportStatement(
             @RequestParam Long customerId,
             @RequestParam String startDate,
             @RequestParam String endDate) {
-
-        // TODO: 实现对账单导出功能
-        // 可以导出为Excel、PDF等格式
-        return Result.ok("导出功能开发中");
+        LocalDate start = LocalDate.parse(startDate);
+        LocalDate end = LocalDate.parse(endDate);
+        ReceivableDtos.StatementResponse statement = adjustmentService.generateStatementWithAdjustments(
+                customerId, start, end, TokenStore.getCurrentLoginUser());
+        byte[] bytes = reportExcelService.statement(statement);
+        String fileName = URLEncoder.encode("客户对账单_" + customerId + "_" + end + ".xlsx",
+                StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + fileName)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(bytes);
     }
 
     /**
@@ -133,7 +150,8 @@ public class StatementAdjustmentController {
         ReceivableDtos.StatementResponse statement = adjustmentService.generateStatementWithAdjustments(
                 customerId,
                 LocalDate.parse(startDate),
-                LocalDate.parse(endDate));
+                LocalDate.parse(endDate),
+                TokenStore.getCurrentLoginUser());
 
         // 验证平衡：期初 + 本期应收 - 本期收款 - 调整 = 期末
         boolean isBalanced = statement.getClosingBalance().compareTo(
@@ -157,7 +175,8 @@ public class StatementAdjustmentController {
         ReceivableDtos.StatementResponse statement = adjustmentService.generateStatementWithAdjustments(
                 customerId,
                 LocalDate.parse(startDate),
-                LocalDate.parse(endDate));
+                LocalDate.parse(endDate),
+                TokenStore.getCurrentLoginUser());
 
         StatementSummary summary = new StatementSummary();
         summary.setCustomerId(customerId);

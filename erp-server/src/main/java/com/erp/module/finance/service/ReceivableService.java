@@ -9,6 +9,8 @@ import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.mapper.PaymentMapper;
 import com.erp.module.finance.mapper.PaymentAllocationMapper;
 import com.erp.module.finance.mapper.ReceivableMapper;
+import com.erp.module.finance.mapper.StatementAdjustmentMapper;
+import com.erp.module.finance.entity.StatementAdjustment;
 import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.masterdata.entity.Customer;
 import com.erp.module.masterdata.mapper.CustomerMapper;
@@ -39,6 +41,7 @@ public class ReceivableService {
     private final DocSequenceService docSequenceService;
     private final OperationLogService operationLogService;
     private final SystemAuthorizationService authorizationService;
+    private final StatementAdjustmentMapper statementAdjustmentMapper;
 
     public ReceivableService(ReceivableMapper receivableMapper,
                             PaymentMapper paymentMapper,
@@ -46,7 +49,8 @@ public class ReceivableService {
                             CustomerMapper customerMapper,
                             DocSequenceService docSequenceService,
                             OperationLogService operationLogService,
-                            SystemAuthorizationService authorizationService) {
+                            SystemAuthorizationService authorizationService,
+                            StatementAdjustmentMapper statementAdjustmentMapper) {
         this.receivableMapper = receivableMapper;
         this.paymentMapper = paymentMapper;
         this.allocationMapper = allocationMapper;
@@ -54,6 +58,7 @@ public class ReceivableService {
         this.docSequenceService = docSequenceService;
         this.operationLogService = operationLogService;
         this.authorizationService = authorizationService;
+        this.statementAdjustmentMapper = statementAdjustmentMapper;
     }
 
     /**
@@ -159,7 +164,7 @@ public class ReceivableService {
     @Transactional
     public ReceivableDtos.SettleResponse settleReceivable(ReceivableDtos.SettleRequest request,
                                                         TokenStore.LoginUser user) {
-        Receivable receivable = receivableMapper.selectById(request.getReceivableId());
+        Receivable receivable = receivableMapper.selectForUpdate(request.getReceivableId());
         if (receivable == null) {
             throw new BusinessException("应收账款记录不存在");
         }
@@ -395,36 +400,44 @@ public class ReceivableService {
     public ReceivableDtos.StatementResponse generateStatement(Long customerId,
                                                              LocalDate startDate,
                                                              LocalDate endDate) {
-        // 获取客户信息
+        return generateStatement(customerId, startDate, endDate, null);
+    }
+
+    public ReceivableDtos.StatementResponse generateStatement(Long customerId,
+                                                             LocalDate startDate,
+                                                             LocalDate endDate,
+                                                             TokenStore.LoginUser user) {
+        if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
+            throw new BusinessException("对账单日期范围无效");
+        }
         Customer customer = customerMapper.selectById(customerId);
         if (customer == null) {
             throw new BusinessException("客户不存在");
         }
+        authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
 
-        // 查询指定日期范围内的应收账款
-        List<Receivable> receivables = receivableMapper.getByDateRange(startDate, endDate);
-
-        // 计算期初余额（取上一天的数据）
-        LocalDate prevDate = startDate.minusDays(1);
-        List<Receivable> prevReceivables = receivableMapper.getByDateRange(prevDate, prevDate);
-        BigDecimal openingBalance = prevReceivables.stream()
+        List<Receivable> receivables = receivableMapper.getByCustomerAndDateRange(customerId, startDate, endDate);
+        List<Receivable> previous = receivableMapper.getByCustomerBeforeDate(customerId, startDate);
+        BigDecimal openingBalance = previous.stream()
                 .map(Receivable::getRemainingAmount)
+                .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // 计算本期数据
         BigDecimal currentReceivables = receivables.stream()
                 .map(Receivable::getAmount)
+                .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-
         BigDecimal payments = receivables.stream()
                 .map(Receivable::getPaidAmount)
+                .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal adjustments = statementAdjustmentMapper.getByCustomerAndDateRange(customerId, startDate, endDate)
+                .stream()
+                .map(StatementAdjustment::getAdjustmentAmount)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal closingBalance = openingBalance.add(currentReceivables)
+                .subtract(payments).subtract(adjustments);
 
-        BigDecimal adjustments = BigDecimal.ZERO; // TODO: 添加调整金额的逻辑
-
-        BigDecimal closingBalance = openingBalance.add(currentReceivables).subtract(payments).subtract(adjustments);
-
-        // 构建对账单明细
         List<ReceivableDtos.StatementResponse.StatementDetail> details = receivables.stream()
                 .map(receivable -> {
                     ReceivableDtos.StatementResponse.StatementDetail detail = new ReceivableDtos.StatementResponse.StatementDetail();
@@ -436,19 +449,10 @@ public class ReceivableService {
                     detail.setRemaining(receivable.getRemainingAmount());
                     detail.setStatus(receivable.getStatus());
                     return detail;
-                })
-                .collect(Collectors.toList());
+                }).collect(Collectors.toList());
 
-        return new ReceivableDtos.StatementResponse(
-                customerId,
-                customer.getName(),
-                endDate,
-                openingBalance,
-                currentReceivables,
-                payments,
-                adjustments,
-                closingBalance,
-                details);
+        return new ReceivableDtos.StatementResponse(customerId, customer.getName(), endDate,
+                openingBalance, currentReceivables, payments, adjustments, closingBalance, details);
     }
 
     private List<Long> scopedCustomerIds(TokenStore.LoginUser user) {

@@ -1,7 +1,6 @@
 package com.erp.module.finance.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.erp.common.PageResult;
 import com.erp.module.masterdata.entity.Customer;
 import com.erp.module.masterdata.entity.Product;
 import com.erp.module.masterdata.entity.Warehouse;
@@ -21,7 +20,8 @@ import com.erp.module.finance.mapper.PayableMapper;
 import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.mapper.ReceivableMapper;
 import com.erp.module.finance.dto.ReportDtos;
-import com.erp.module.inventory.service.InventoryService;
+import com.erp.module.inventory.entity.InventoryLedger;
+import com.erp.module.inventory.mapper.InventoryLedgerMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -50,7 +50,7 @@ public class ReportService {
     private final CustomerMapper customerMapper;
     private final ProductMapper productMapper;
     private final WarehouseMapper warehouseMapper;
-    private final InventoryService inventoryService;
+    private final InventoryLedgerMapper inventoryLedgerMapper;
 
     /**
      * 销售日报表
@@ -149,11 +149,12 @@ public class ReportService {
 
             // 获取该仓库所有商品的库存
             // 这里假设有一个方法可以查询指定仓库的库存，如果没有，需要从inventory表查询
-            Map<Long, BigDecimal> warehouseStocks = getStocksByWarehouse(warehouse.getId(), date);
+            Map<Long, InventoryLedger> warehouseStocks = getStocksByWarehouse(warehouse.getId(), date);
 
-            for (Map.Entry<Long, BigDecimal> entry : warehouseStocks.entrySet()) {
+            for (Map.Entry<Long, InventoryLedger> entry : warehouseStocks.entrySet()) {
                 Long productId = entry.getKey();
-                BigDecimal quantity = entry.getValue();
+                InventoryLedger snapshot = entry.getValue();
+                BigDecimal quantity = safe(snapshot.getBalanceQty());
 
                 // 如果指定了商品，跳过其他商品
                 if (request.getProductId() != null && !productId.equals(request.getProductId())) {
@@ -165,9 +166,9 @@ public class ReportService {
                     continue;
                 }
 
-                // 计算库存价值（使用移动加权平均成本）
-                BigDecimal unitCost = getUnitCost(productId, date);
-                BigDecimal totalValueForItem = quantity.multiply(unitCost);
+                // 使用截至报表日期的流水结存快照，不读取即时库存表。
+                BigDecimal unitCost = quantity.signum() == 0 ? BigDecimal.ZERO
+                        : safe(snapshot.getBalanceAmount()).divide(quantity, 4, RoundingMode.HALF_UP);
 
                 ReportDtos.InventorySummaryItem item = new ReportDtos.InventorySummaryItem();
                 item.setProductId(productId);
@@ -177,6 +178,7 @@ public class ReportService {
                 item.setWarehouseName(warehouse.getName());
                 item.setQuantity(quantity);
                 item.setUnitCost(unitCost);
+                BigDecimal totalValueForItem = safe(snapshot.getBalanceAmount());
                 item.setTotalValue(totalValueForItem);
 
                 items.add(item);
@@ -264,45 +266,27 @@ public class ReportService {
         return order != null && salespersonId.equals(order.getSalespersonId());
     }
 
-    private Map<Long, BigDecimal> getStocksByWarehouse(Long warehouseId, LocalDate date) {
-        return inventoryService.getWarehouseStocks(warehouseId);
+    private Map<Long, InventoryLedger> getStocksByWarehouse(Long warehouseId, LocalDate date) {
+        return inventoryLedgerMapper.selectLatestByWarehouseAsOf(warehouseId, date).stream()
+                .collect(Collectors.toMap(InventoryLedger::getProductId, ledger -> ledger,
+                        (first, second) -> first, LinkedHashMap::new));
+    }
+
+    private static BigDecimal safe(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     /**
-     * 获取商品的单位成本
-     */
-    private BigDecimal getUnitCost(Long productId, LocalDate date) {
-        // 查询所有仓库的平均成本
-        List<Warehouse> warehouses = warehouseMapper.selectList(Wrappers.emptyWrapper());
-        BigDecimal totalCost = BigDecimal.ZERO;
-        BigDecimal totalQty = BigDecimal.ZERO;
-
-        for (Warehouse warehouse : warehouses) {
-            BigDecimal cost = inventoryService.getUnitCost(productId, warehouse.getId());
-            BigDecimal qty = inventoryService.getStockQuantity(productId, warehouse.getId());
-            totalCost = totalCost.add(cost.multiply(qty));
-            totalQty = totalQty.add(qty);
-        }
-
-        if (totalQty.compareTo(BigDecimal.ZERO) == 0) {
-            return BigDecimal.ZERO;
-        }
-
-        return totalCost.divide(totalQty, 4, RoundingMode.HALF_UP);
-    }
-
-    /**
-     * 获取库存总价值
+     * 获取截至日期的库存总价值
      */
     private BigDecimal getInventoryTotalValue(LocalDate date) {
-        // 查询所有仓库的库存价值
         List<Warehouse> warehouses = warehouseMapper.selectList(Wrappers.emptyWrapper());
         BigDecimal totalValue = BigDecimal.ZERO;
-
         for (Warehouse warehouse : warehouses) {
-            totalValue = totalValue.add(inventoryService.getWarehouseTotalValue(warehouse.getId()));
+            totalValue = totalValue.add(inventoryLedgerMapper.selectLatestByWarehouseAsOf(warehouse.getId(), date).stream()
+                    .map(ledger -> safe(ledger.getBalanceAmount()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
         }
-
         return totalValue.setScale(2, RoundingMode.HALF_UP);
     }
 }

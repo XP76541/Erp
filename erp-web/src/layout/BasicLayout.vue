@@ -75,6 +75,7 @@
           <el-menu-item index="/system/users">用户管理</el-menu-item>
           <el-menu-item index="/system/roles">角色权限</el-menu-item>
           <el-menu-item index="/system/logs">操作日志</el-menu-item>
+          <el-menu-item index="/system/backups">数据库备份</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>
