@@ -17,10 +17,10 @@ export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') ?? '')
   const realName = ref(localStorage.getItem('realName') ?? '')
   const roleCodes = ref(readRoles())
+  const hydrationComplete = ref(roleCodes.value.length > 0)
+  let hydrationPromise: Promise<void> | null = null
 
-  // An empty role list means the server did not expose role data. In that case
-  // keep the existing menu visible rather than accidentally hiding valid work.
-  const rolesLoaded = computed(() => roleCodes.value.length > 0)
+  const rolesLoaded = computed(() => hydrationComplete.value)
   const hasAnyRole = (...roles: string[]) =>
     !rolesLoaded.value || roles.some((role) => roleCodes.value.includes(role))
   const setSession = (data: LoginResult | AuthUser, preserveRoles = false) => {
@@ -29,6 +29,7 @@ export const useUserStore = defineStore('user', () => {
     const roles = data.roleCodes ?? data.roles
     if (roles) roleCodes.value = roles.map((role) => role.toUpperCase())
     else if (!preserveRoles) roleCodes.value = []
+    hydrationComplete.value = true
     if ('token' in data) localStorage.setItem('token', data.token)
     localStorage.setItem('realName', data.realName)
     saveRoles(roleCodes.value)
@@ -39,14 +40,23 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function loadCurrentUser() {
-    if (!token.value) return
-    setSession(await authApi.me(), true)
+    if (!token.value) {
+      hydrationComplete.value = true
+      return
+    }
+    if (!hydrationPromise) {
+      hydrationPromise = authApi.me()
+        .then((data) => setSession(data, true))
+        .finally(() => { hydrationPromise = null })
+    }
+    await hydrationPromise
   }
 
   function logout() {
     token.value = ''
     realName.value = ''
     roleCodes.value = []
+    hydrationComplete.value = true
     localStorage.removeItem('token')
     localStorage.removeItem('realName')
     localStorage.removeItem('roleCodes')

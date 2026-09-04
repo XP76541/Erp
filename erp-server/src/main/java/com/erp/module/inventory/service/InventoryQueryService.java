@@ -95,7 +95,7 @@ public class InventoryQueryService {
                 Wrappers.<InventoryLedger>lambdaQuery()
                         .eq(warehouseId != null, InventoryLedger::getWarehouseId, warehouseId)
                         .eq(productId != null, InventoryLedger::getProductId, productId)
-                        .eq(docType != null && !docType.isBlank(), InventoryLedger::getDocType, docType.trim())
+                        .eq(docType != null && !docType.isBlank(), InventoryLedger::getDocType, docType == null ? null : docType.trim())
                         .ge(startDate != null, InventoryLedger::getBizDate, startDate)
                         .le(endDate != null, InventoryLedger::getBizDate, endDate)
                         .orderByDesc(InventoryLedger::getBizDate)

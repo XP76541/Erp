@@ -1,6 +1,7 @@
 package com.erp.module.finance.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.erp.common.BusinessException;
 import com.erp.common.PageResult;
 import com.erp.module.finance.dto.PaymentDtos;
@@ -96,8 +97,9 @@ public class PaymentService {
         }
         List<PaymentAllocation> allocations = allocationMapper.getByPaymentId(id);
         BigDecimal total = allocations.stream().map(PaymentAllocation::getAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (total.compareTo(payment.getAmount()) != 0) {
+        if (total.compareTo(payment.getAmount() == null ? BigDecimal.ZERO : payment.getAmount()) != 0) {
             throw new BusinessException("付款单必须全部核销,不能存在未分配金额");
         }
         for (PaymentAllocation allocation : allocations) {
@@ -119,8 +121,11 @@ public class PaymentService {
                 .ge(params.getStartDate() != null, Payment::getBizDate, params.getStartDate())
                 .le(params.getEndDate() != null, Payment::getBizDate, params.getEndDate())
                 .orderByDesc(Payment::getCreatedAt);
-        List<Payment> payments = paymentMapper.selectList(query);
-        return new PageResult<>(payments.size(), payments.stream().map(this::toResponse).toList());
+        long page = params.getPage() == null ? 1L : Math.max(params.getPage(), 1L);
+        long size = params.getSize() == null ? 10L : Math.min(Math.max(params.getSize(), 1L), 500L);
+        Page<Payment> result = paymentMapper.selectPage(new Page<>(page, size), query);
+        List<Payment> payments = result.getRecords();
+        return new PageResult<>(result.getTotal(), payments.stream().map(this::toResponse).toList());
     }
 
     private void validatePayable(Payable payable, Long supplierId, BigDecimal amount) {
@@ -129,7 +134,8 @@ public class PaymentService {
         if (!"UNSETTLED".equals(payable.getStatus()) && !"PARTIAL".equals(payable.getStatus())) {
             throw new BusinessException("应付账款已结清");
         }
-        BigDecimal remaining = payable.getAmount().subtract(payable.getPaidAmount());
+        BigDecimal remaining = (payable.getAmount() == null ? BigDecimal.ZERO : payable.getAmount())
+                .subtract(payable.getPaidAmount() == null ? BigDecimal.ZERO : payable.getPaidAmount());
         if (amount.compareTo(remaining) > 0) throw new BusinessException("核销金额超过应付余额: " + payable.getDocNo());
     }
 
@@ -140,7 +146,8 @@ public class PaymentService {
         Supplier supplier = supplierMapper.selectById(payment.getSupplierId());
         response.setSupplierName(supplier == null ? "" : supplier.getName());
         response.setBizDate(payment.getBizDate()); response.setAmount(payment.getAmount());
-        response.setAllocatedAmount(allocationMapper.getAllocatedAmount(payment.getId()));
+        BigDecimal allocatedAmount = allocationMapper.getAllocatedAmount(payment.getId());
+        response.setAllocatedAmount(allocatedAmount == null ? BigDecimal.ZERO : allocatedAmount);
         response.setStatus(payment.getStatus()); response.setMethod(payment.getMethod());
         response.setBankAccount(payment.getBankAccount()); response.setRemark(payment.getRemark());
         response.setCreatedAt(payment.getCreatedAt());

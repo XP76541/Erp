@@ -316,6 +316,7 @@ async function createCollection(row: ReceivableListResponse) {
   collectionForm.remark = ''
   collectionForm.allocations = receivables.map(r => ({
     receivableId: r.id,
+    customerId: r.customerId,
     receivableDocNo: r.docNo,
     receivableAmount: r.amount,
     paidAmount: r.paidAmount,
@@ -331,8 +332,17 @@ async function handleCreateCollection() {
   if (!valid) return
 
   // 计算核销总额
-  const totalAllocated = collectionForm.allocations.reduce((sum, item) => sum + item.allocatedAmount, 0)
-  if (totalAllocated > collectionForm.amount) {
+  const totalAllocated = collectionForm.allocations.reduce((sum, item) => sum + Number(item.allocatedAmount || 0), 0)
+  const amount = Number(collectionForm.amount || 0)
+  if (amount <= 0) {
+    ElMessage.warning('收款金额必须大于0')
+    return
+  }
+  if (totalAllocated <= 0) {
+    ElMessage.warning('请至少填写一笔核销金额')
+    return
+  }
+  if (totalAllocated > amount) {
     ElMessage.warning('核销总额不能超过收款金额')
     return
   }
@@ -340,11 +350,14 @@ async function handleCreateCollection() {
   creating.value = true
   try {
     await financeApi.settleReceivables({
-      settlements: collectionForm.allocations.filter(a => a.allocatedAmount > 0).map(a => ({
+      customerId: collectionForm.allocations[0].customerId,
+      bizDate: collectionForm.businessDate,
+      amount,
+      method: collectionForm.paymentMethod,
+      remark: collectionForm.remark,
+      allocations: collectionForm.allocations.filter(a => Number(a.allocatedAmount || 0) > 0).map(a => ({
         receivableId: a.receivableId,
-        amount: a.allocatedAmount,
-        paymentMethod: collectionForm.paymentMethod,
-        remark: collectionForm.remark
+        amount: Number(a.allocatedAmount)
       }))
     })
     ElMessage.success('收款单创建成功')

@@ -62,13 +62,12 @@ export const financeApi = {
     request.get<PageResult<PaymentListResponse>>('/finance/payments', { params }),
   createPayment: (data: PaymentCreateRequest) => request.post<number>('/finance/payments', data),
   auditPayment: (id: number, data: PaymentAuditRequest) => request.put<void>(`/finance/payments/${id}/audit`, data),
-  // 客户应收旧页面兼容接口，供应商付款不复用这些字段
+  settleReceivables: (data: { customerId: number; bizDate?: string; amount: number; method?: string; bankAccount?: string; remark?: string; allocations: Array<{ receivableId: number; amount: number }>; idempotencyKey?: string }) =>
+    request.post<unknown>('/finance/receivables/receipts', data),
   getReceivables: (params: { page?: number; size?: number; customerId?: number; status?: string; startDate?: string; endDate?: string }) =>
     request.get<PageResult<ReceivableListResponse>>('/finance/receivables', { params }),
   getAgingAnalysis: (cutoffDate?: string) => request.get<AgingAnalysisResponse[]>('/finance/receivables/aging-analysis', { params: { cutoffDate } }),
   getOverdueReceivables: (cutoffDate?: string) => request.get<ReceivableListResponse[]>('/finance/receivables/overdue', { params: { cutoffDate } }),
   getReceivableStats: () => request.get('/finance/receivables/statistics'),
-  settleReceivables: (data: { settlements: Array<{ receivableId: number; amount: number; paymentMethod?: string; remark?: string }> }) =>
-    request.post<void>('/finance/receivables/batch-settle', data),
   getReceivablesByCustomer: (customerId: number) => request.get<{ records: ReceivableListResponse[]; total: number }>('/finance/receivables', { params: { customerId, page: 1, size: 500 } }),
 }

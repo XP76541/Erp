@@ -181,10 +181,9 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { purchaseOrderApi, supplierApi, productApi, warehouseApi } from '@/api/purchase'
-import { supplierApi as masterSupplierApi } from '@/api/masterdata'
-import { productApi as masterProductApi } from '@/api/masterdata'
-import { warehouseApi as masterWarehouseApi } from '@/api/masterdata'
+import { supplierApi } from '@/api/supplier'
+import { productApi } from '@/api/product'
+import { warehouseApi } from '@/api/warehouse'
 
 const props = defineProps({
   visible: {
@@ -260,8 +259,8 @@ const init = async () => {
 // 获取供应商列表
 const getSuppliers = async () => {
   try {
-    const response = await masterSupplierApi.list()
-    suppliers.value = response.data || []
+    const response = await supplierApi.page({ page: 1, size: 200 })
+    suppliers.value = response.records || []
   } catch (error) {
     console.error('获取供应商列表失败:', error)
   }
@@ -270,8 +269,8 @@ const getSuppliers = async () => {
 // 获取商品列表
 const getProducts = async () => {
   try {
-    const response = await masterProductApi.list({ status: 'ACTIVE' })
-    products.value = response.data || []
+    const response = await productApi.page({ page: 1, size: 500 })
+    products.value = response.records || []
   } catch (error) {
     console.error('获取商品列表失败:', error)
   }
@@ -280,8 +279,7 @@ const getProducts = async () => {
 // 获取仓库列表
 const getWarehouses = async () => {
   try {
-    const response = await masterWarehouseApi.list()
-    warehouses.value = response.data || []
+    warehouses.value = await warehouseApi.listAll()
   } catch (error) {
     console.error('获取仓库列表失败:', error)
   }
@@ -290,8 +288,7 @@ const getWarehouses = async () => {
 // 加载订单数据
 const loadOrderData = async () => {
   try {
-    const response = await purchaseOrderApi.detail(props.orderId)
-    const data = response.data
+    const data = await purchaseOrderApi.detail(props.orderId)
 
     form.value = {
       docNo: data.order.docNo,
@@ -319,9 +316,7 @@ const loadOrderData = async () => {
 // 生成单号
 const generateDocNo = async () => {
   try {
-    // 调用后端接口生成单号
-    const response = await purchaseOrderApi.generateDocNo()
-    form.value.docNo = response.data
+    form.value.docNo = `PO-${Date.now()}`
   } catch (error) {
     console.error('生成单号失败:', error)
   }

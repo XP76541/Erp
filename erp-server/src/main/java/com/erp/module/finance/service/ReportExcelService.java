@@ -18,9 +18,9 @@ public class ReportExcelService {
     public byte[] salesDaily(List<ReportDtos.SalesDailyReportResponse> reports) {
         return workbook("销售日报", wb -> {
             Sheet summary = wb.createSheet("日报汇总");
-            Row header = summary.createRow(0);
+            Row summaryHeader = summary.createRow(0);
             String[] summaryColumns = {"日期", "单据数", "销售额", "已发货金额"};
-            for (int i = 0; i < summaryColumns.length; i++) summary.createCell(i).setCellValue(summaryColumns[i]);
+            for (int i = 0; i < summaryColumns.length; i++) summaryHeader.createCell(i).setCellValue(summaryColumns[i]);
             int summaryRow = 1;
             for (var report : reports) {
                 Row row = summary.createRow(summaryRow++);

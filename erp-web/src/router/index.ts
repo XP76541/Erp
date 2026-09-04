@@ -45,6 +45,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '客户档案', roles: ['ADMIN', 'SALES', 'FINANCE'] },
       },
       {
+        path: 'purchase/orders',
+        name: 'purchaseOrders',
+        component: () => import('@/views/purchase/PurchaseOrderList.vue'),
+        meta: { title: '采购订单', roles: ['ADMIN', 'PURCHASE', 'FINANCE'] },
+      },
+      {
         path: 'purchase/inbounds',
         name: 'purchaseInbounds',
         component: () => import('@/views/purchase/PurchaseInboundList.vue'),
@@ -152,6 +158,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/system/BackupManagement.vue'),
         meta: { title: '数据库备份', roles: ['ADMIN'] },
       },
+      {
+        path: ':pathMatch(.*)*',
+        name: 'notFound',
+        component: () => import('@/views/NotFoundView.vue'),
+        meta: { title: '页面不存在' },
+      },
     ],
   },
 ]
@@ -175,7 +187,13 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
   const requiredRoles = to.meta.roles as string[] | undefined
   if (requiredRoles?.length) {
     const userStore = useUserStore()
-    if (!userStore.rolesLoaded) return '/dashboard'
+    if (!userStore.rolesLoaded) {
+      try {
+        await userStore.loadCurrentUser()
+      } catch {
+        return '/login'
+      }
+    }
     if (!userStore.hasAnyRole(...requiredRoles)) return '/dashboard'
   }
 })

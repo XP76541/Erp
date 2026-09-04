@@ -5,6 +5,7 @@ import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.finance.entity.ReceivableException;
 import com.erp.module.finance.service.ExceptionMonitorService;
 import com.erp.module.system.TokenStore;
+import com.erp.module.system.service.SystemAuthorizationService;
 import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 
@@ -19,6 +20,7 @@ import java.util.List;
 public class ExceptionController {
 
     private final ExceptionMonitorService exceptionService;
+    private final SystemAuthorizationService authorizationService;
 
     /**
      * 手动创建异常
@@ -26,6 +28,7 @@ public class ExceptionController {
     @PostMapping
     public Result<Long> createException(@RequestBody ReceivableDtos.ExceptionRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+        authorizationService.requireFinanceAccess(currentUser);
         Long id = exceptionService.createManualException(request, currentUser);
         return Result.ok(id);
     }
@@ -35,6 +38,7 @@ public class ExceptionController {
      */
     @GetMapping("/open")
     public Result<List<ReceivableDtos.CollectionResponse>> getOpenExceptions() {
+        authorizationService.requireFinanceAccess(TokenStore.getCurrentLoginUser());
         // 通过服务方法获取异常列表
         List<com.erp.module.finance.entity.ReceivableException> exceptions = exceptionService.getOpenExceptions();
 
@@ -51,7 +55,7 @@ public class ExceptionController {
                     response.setContactResult(null);
                     response.setNextAction(null);
                     response.setOperator(exception.getCreatedBy());
-                    response.setCreatedAt(exception.getCreatedAt().toString());
+                    response.setCreatedAt(exception.getCreatedAt() == null ? null : exception.getCreatedAt().toString());
                     return response;
                 })
                 .collect(java.util.stream.Collectors.toList()));
@@ -62,6 +66,7 @@ public class ExceptionController {
      */
     @GetMapping("/high-priority")
     public Result<List<ReceivableDtos.CollectionResponse>> getHighPriorityExceptions() {
+        authorizationService.requireFinanceAccess(TokenStore.getCurrentLoginUser());
         List<com.erp.module.finance.entity.ReceivableException> exceptions = exceptionService.getHighPriorityExceptions();
 
         return Result.ok(exceptions.stream()
@@ -77,7 +82,7 @@ public class ExceptionController {
                     response.setContactResult(null);
                     response.setNextAction(null);
                     response.setOperator(exception.getCreatedBy());
-                    response.setCreatedAt(exception.getCreatedAt().toString());
+                    response.setCreatedAt(exception.getCreatedAt() == null ? null : exception.getCreatedAt().toString());
                     return response;
                 })
                 .collect(java.util.stream.Collectors.toList()));
@@ -88,6 +93,7 @@ public class ExceptionController {
      */
     @GetMapping("/customer/{customerId}")
     public Result<List<ReceivableDtos.CollectionResponse>> getExceptionsByCustomer(@PathVariable Long customerId) {
+        authorizationService.requireFinanceAccess(TokenStore.getCurrentLoginUser());
         List<com.erp.module.finance.entity.ReceivableException> exceptions = exceptionService.getExceptionsByCustomer(customerId);
 
         return Result.ok(exceptions.stream()
@@ -103,7 +109,7 @@ public class ExceptionController {
                     response.setContactResult(null);
                     response.setNextAction(null);
                     response.setOperator(exception.getCreatedBy());
-                    response.setCreatedAt(exception.getCreatedAt().toString());
+                    response.setCreatedAt(exception.getCreatedAt() == null ? null : exception.getCreatedAt().toString());
                     return response;
                 })
                 .collect(java.util.stream.Collectors.toList()));
@@ -115,6 +121,7 @@ public class ExceptionController {
     @PutMapping("/{id}/resolve")
     public Result<Void> resolveException(@PathVariable Long id, @RequestBody ReceivableDtos.ExceptionResolutionRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+        authorizationService.requireFinanceAccess(currentUser);
         exceptionService.resolveException(id, request, currentUser);
         return Result.ok();
     }
@@ -125,6 +132,7 @@ public class ExceptionController {
     @PutMapping("/{id}/ignore")
     public Result<Void> ignoreException(@PathVariable Long id, @RequestParam String reason) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+        authorizationService.requireFinanceAccess(currentUser);
         exceptionService.ignoreException(id, reason, currentUser);
         return Result.ok();
     }
@@ -134,6 +142,7 @@ public class ExceptionController {
      */
     @GetMapping("/statistics")
     public Result<ReceivableDtos.ExceptionStatisticsResponse> getExceptionStatistics() {
+        authorizationService.requireFinanceAccess(TokenStore.getCurrentLoginUser());
         ReceivableDtos.ExceptionStatisticsResponse statistics = exceptionService.getExceptionStatistics();
         return Result.ok(statistics);
     }
@@ -143,6 +152,7 @@ public class ExceptionController {
      */
     @GetMapping("/trend")
     public Result<List<ReceivableDtos.ExceptionTrendResponse>> getExceptionTrend(@RequestParam(defaultValue = "30") Integer days) {
+        authorizationService.requireFinanceAccess(TokenStore.getCurrentLoginUser());
         List<ReceivableDtos.ExceptionTrendResponse> trends = exceptionService.getExceptionTrend(days);
         return Result.ok(trends);
     }
@@ -152,6 +162,7 @@ public class ExceptionController {
      */
     @GetMapping("/{id}")
     public Result<ExceptionDetail> getExceptionDetail(@PathVariable Long id) {
+        authorizationService.requireFinanceAccess(TokenStore.getCurrentLoginUser());
         com.erp.module.finance.entity.ReceivableException exception = exceptionService.getExceptionById(id);
         if (exception == null) {
             return Result.fail("异常记录不存在");
@@ -172,7 +183,7 @@ public class ExceptionController {
         detail.setAssignedTo(exception.getAssignedTo());
         detail.setCreatedBy(exception.getCreatedBy());
         detail.setCreatedByName(exception.getCreatedByName());
-        detail.setCreatedAt(exception.getCreatedAt().toString());
+        detail.setCreatedAt(exception.getCreatedAt() == null ? null : exception.getCreatedAt().toString());
         detail.setResolvedAt(exception.getResolvedAt() != null ? exception.getResolvedAt().toString() : null);
         detail.setResolution(exception.getResolution());
 

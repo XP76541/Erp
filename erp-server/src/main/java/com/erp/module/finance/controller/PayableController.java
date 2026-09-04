@@ -4,6 +4,8 @@ import com.erp.common.PageResult;
 import com.erp.common.Result;
 import com.erp.module.finance.dto.PayableDtos;
 import com.erp.module.finance.service.PayableService;
+import com.erp.module.system.TokenStore;
+import com.erp.module.system.service.SystemAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +22,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PayableController {
     private final PayableService payableService;
+    private final SystemAuthorizationService authorizationService;
 
     @GetMapping
     public Result<PageResult<PayableDtos.ListResponse>> list(
@@ -31,17 +34,20 @@ public class PayableController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueEndDate,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
+        authorizationService.requireFinanceAccess(TokenStore.getCurrentLoginUser());
         return Result.ok(payableService.list(supplierId, status, startDate, endDate,
                 dueStartDate, dueEndDate, page, size));
     }
 
     @GetMapping("/{id}")
     public Result<PayableDtos.ListResponse> detail(@PathVariable Long id) {
+        authorizationService.requireFinanceAccess(TokenStore.getCurrentLoginUser());
         return Result.ok(payableService.detail(id));
     }
 
     @GetMapping("/aging")
     public Result<List<PayableDtos.AgingResponse>> aging(@RequestParam(required = false) Long supplierId) {
+        authorizationService.requireFinanceAccess(TokenStore.getCurrentLoginUser());
         return Result.ok(payableService.aging(supplierId));
     }
 }

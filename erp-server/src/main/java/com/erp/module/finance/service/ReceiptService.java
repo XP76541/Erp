@@ -42,6 +42,27 @@ public class ReceiptService {
     private final OperationLogService operationLogService;
     private final SystemAuthorizationService authorizationService;
 
+    /** 将旧的单笔核销请求统一转换为客户收款模型。 */
+    @Transactional
+    public ReceivableDtos.ReceiptResponse createSingleAllocation(Long receivableId, BigDecimal amount,
+                                                                  String method, String remark,
+                                                                  TokenStore.LoginUser user) {
+        Receivable receivable = receivableMapper.selectById(receivableId);
+        if (receivable == null) throw new BusinessException("应收账款记录不存在");
+        ReceivableDtos.ReceiptCreateRequest request = new ReceivableDtos.ReceiptCreateRequest();
+        request.setCustomerId(receivable.getCustomerId());
+        request.setBizDate(LocalDate.now());
+        request.setAmount(amount);
+        request.setMethod(method);
+        request.setRemark(remark);
+        ReceivableDtos.ReceiptCreateRequest.AllocationItem item =
+                new ReceivableDtos.ReceiptCreateRequest.AllocationItem();
+        item.setReceivableId(receivableId);
+        item.setAmount(amount);
+        request.setAllocations(List.of(item));
+        return createAndAllocate(request, user);
+    }
+
     /** 创建已审核收款单并完成多单核销；整个过程在一个事务中。 */
     @Transactional
     public ReceivableDtos.ReceiptResponse createAndAllocate(ReceivableDtos.ReceiptCreateRequest request,

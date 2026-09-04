@@ -8,6 +8,7 @@ import com.erp.module.finance.entity.CollectionRecord;
 import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.service.CollectionService;
 import com.erp.module.system.TokenStore;
+import com.erp.module.system.service.SystemAuthorizationService;
 import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 import java.time.LocalDateTime;
@@ -23,13 +24,15 @@ import java.util.stream.Collectors;
 public class CollectionController {
 
     private final CollectionService collectionService;
+    private final SystemAuthorizationService authorizationService;
 
-    /**
-     * 创建催收记录
-     */
+    private TokenStore.LoginUser currentUser() {
+        return TokenStore.getCurrentLoginUser();
+    }
     @PostMapping
     public Result<Long> create(@RequestBody ReceivableDtos.CollectionRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+        authorizationService.requireFinanceAccess(currentUser);
         Long id = collectionService.createCollectionRecord(request, currentUser);
         return Result.ok(id);
     }
@@ -39,6 +42,7 @@ public class CollectionController {
      */
     @GetMapping("/receivable/{receivableId}")
     public Result<List<ReceivableDtos.CollectionResponse>> getCollectionRecordsByReceivable(@PathVariable Long receivableId) {
+        authorizationService.requireFinanceAccess(currentUser());
         List<ReceivableDtos.CollectionResponse> records = collectionService.getCollectionRecordsByReceivable(receivableId);
         return Result.ok(records);
     }
@@ -51,6 +55,7 @@ public class CollectionController {
             @PathVariable Long customerId,
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size) {
+        authorizationService.requireFinanceAccess(currentUser());
         PageResult<ReceivableDtos.CollectionResponse> result = collectionService.getCollectionRecordsByCustomer(customerId, page, size);
         return Result.ok(result);
     }
@@ -61,6 +66,7 @@ public class CollectionController {
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable Long id, @RequestBody ReceivableDtos.CollectionRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+        authorizationService.requireFinanceAccess(currentUser);
         collectionService.updateCollectionRecord(id, request, currentUser);
         return Result.ok();
     }
@@ -70,6 +76,7 @@ public class CollectionController {
      */
     @GetMapping("/statistics")
     public Result<ReceivableDtos.CollectionStatsResponse> getStatistics() {
+        authorizationService.requireFinanceAccess(currentUser());
         ReceivableDtos.CollectionStatsResponse statistics = collectionService.getCollectionStatistics();
         return Result.ok(statistics);
     }
@@ -79,6 +86,7 @@ public class CollectionController {
      */
     @GetMapping("/auto-plan")
     public Result<List<ReceivableDtos.CollectionResponse>> generateCollectionPlan() {
+        authorizationService.requireFinanceAccess(currentUser());
         List<Receivable> receivables = collectionService.generateCollectionPlan();
         // 转换为响应格式
         List<ReceivableDtos.CollectionResponse> responses = receivables.stream()
@@ -94,7 +102,7 @@ public class CollectionController {
                     response.setContactResult(null);
                     response.setNextAction(null);
                     response.setOperator(null);
-                    response.setCreatedAt(receivable.getCreatedAt().toString());
+                    response.setCreatedAt(receivable.getCreatedAt() == null ? null : receivable.getCreatedAt().toString());
                     return response;
                 }).collect(Collectors.toList());
         return Result.ok(responses);
@@ -106,6 +114,7 @@ public class CollectionController {
     @PostMapping("/batch")
     public Result<Void> batchCollection(@RequestBody List<ReceivableDtos.CollectionRequest> requests) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
+        authorizationService.requireFinanceAccess(currentUser);
         collectionService.batchCollection(requests, currentUser);
         return Result.ok();
     }
@@ -115,6 +124,7 @@ public class CollectionController {
      */
     @GetMapping("/escalation")
     public Result<List<ReceivableDtos.CollectionResponse>> getEscalationRecords() {
+        authorizationService.requireFinanceAccess(currentUser());
         List<CollectionRecord> records = collectionService.getRecordsForEscalation();
         List<ReceivableDtos.CollectionResponse> responses = records.stream()
                 .map(record -> {
@@ -129,7 +139,7 @@ public class CollectionController {
                     response.setContactResult(record.getContactResult());
                     response.setNextAction(record.getNextAction());
                     response.setOperator(record.getOperatorName());
-                    response.setCreatedAt(record.getCreatedAt().toString());
+                    response.setCreatedAt(record.getCreatedAt() == null ? null : record.getCreatedAt().toString());
                     return response;
                 }).collect(Collectors.toList());
         return Result.ok(responses);
@@ -140,6 +150,7 @@ public class CollectionController {
      */
     @GetMapping("/{id}")
     public Result<ReceivableDtos.CollectionResponse> getDetail(@PathVariable Long id) {
+        authorizationService.requireFinanceAccess(currentUser());
         return Result.ok(collectionService.getCollectionRecord(id));
     }
 }
