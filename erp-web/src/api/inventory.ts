@@ -344,7 +344,7 @@ export const inventoryWarningApi = {
       stockOverLimit: number;
       warningLevel: string;
       isActive: boolean;
-    }>>(`/inventory/warning-configs${productId || warehouseId ? `?productId=${productId}&warehouseId=${warehouseId}` : ''}`),
+    }>>('/inventory/warnings/warning-configs', { params: { productId, warehouseId } }),
 
   // 更新预警配置
   updateWarningConfig: (id: number, data: {
@@ -353,7 +353,7 @@ export const inventoryWarningApi = {
     warningLevel?: string;
     isActive?: boolean;
   }) =>
-    http.put<void>(`/inventory/warning-configs/${id}`, data),
+    http.put<void>(`/inventory/warnings/warning-configs/${id}`, data),
 
   // 创建预警配置
   createWarningConfig: (data: {
@@ -364,13 +364,13 @@ export const inventoryWarningApi = {
     warningLevel?: string;
     isActive?: boolean;
   }) =>
-    http.post<number>('/inventory/warning-configs', data),
+    http.post<number>('/inventory/warnings/warning-configs', data),
 
   // 启用/禁用预警配置
   toggleWarningConfig: (id: number, isActive: boolean) =>
-    http.put<void>(`/inventory/warning-configs/${id}/toggle`, { isActive }),
+    http.put<void>(`/inventory/warnings/warning-configs/${id}/toggle`, { isActive }),
 
   // 批量启用/禁用预警配置
   batchToggleWarningConfig: (ids: number[], isActive: boolean) =>
-    http.put<void>('/inventory/warning-configs/batch-toggle', { ids, isActive }),
+    http.put<void>('/inventory/warnings/warning-configs/batch-toggle', { ids, isActive }),
 };

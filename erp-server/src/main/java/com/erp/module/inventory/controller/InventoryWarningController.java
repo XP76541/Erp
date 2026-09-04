@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 
+import lombok.Data;
+
 /**
  * 库存预警Controller
  */
@@ -83,9 +85,9 @@ public class InventoryWarningController {
      * 批量解决预警
      */
     @PutMapping("/batch-resolve")
-    public Result<Void> batchResolve(@RequestBody List<Long> ids) {
+    public Result<Void> batchResolve(@RequestBody BatchIdsRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        inventoryWarningService.batchResolveWarnings(ids, currentUser);
+        inventoryWarningService.batchResolveWarnings(request.ids(), currentUser);
         return Result.success();
     }
 
@@ -145,9 +147,9 @@ public class InventoryWarningController {
      */
     @PutMapping("/warning-configs/{id}/toggle")
     public Result<Void> toggleWarningConfig(@PathVariable Long id,
-                                          @RequestParam Boolean isActive) {
+                                          @RequestBody ToggleRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        inventoryWarningService.toggleWarningConfig(id, isActive, currentUser);
+        inventoryWarningService.toggleWarningConfig(id, request.isActive(), currentUser);
         return Result.success();
     }
 
@@ -155,16 +157,21 @@ public class InventoryWarningController {
      * 批量启用/禁用预警配置
      */
     @PutMapping("/warning-configs/batch-toggle")
-    public Result<Void> batchToggleWarningConfig(@RequestBody List<Long> ids,
-                                               @RequestParam Boolean isActive) {
+    public Result<Void> batchToggleWarningConfig(@RequestBody BatchToggleRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        inventoryWarningService.batchToggleWarningConfig(ids, isActive, currentUser);
+        inventoryWarningService.batchToggleWarningConfig(request.ids(), request.isActive(), currentUser);
         return Result.success();
     }
 
-    /**
-     * 库存不足预警数量
-     */
+    @Data
+    public static class BatchIdsRequest { private List<Long> ids; }
+
+    @Data
+    public static class ToggleRequest { private Boolean isActive; }
+
+    @Data
+    public static class BatchToggleRequest { private List<Long> ids; private Boolean isActive; }
+
     @GetMapping("/stats/stock-out-count")
     public Result<Integer> getStockOutCount() {
         Integer count = inventoryWarningService.getStats().getStockOutCount();

@@ -1,5 +1,6 @@
 package com.erp.module.inventory.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
 import java.math.BigDecimal;

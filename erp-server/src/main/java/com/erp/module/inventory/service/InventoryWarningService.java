@@ -16,6 +16,7 @@ import com.erp.module.inventory.mapper.InventoryWarningConfigMapper;
 import com.erp.module.inventory.mapper.InventoryWarningLogMapper;
 import com.erp.module.inventory.dto.InventoryWarningDtos;
 import com.erp.module.system.TokenStore;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -121,6 +122,7 @@ public class InventoryWarningService {
             throw new BusinessException("预警已解决");
         }
 
+        BigDecimal currentQty = warning.getCurrentQty();
         warningMapper.resolveWarning(id, user.userId());
 
         // 记录解决日志
@@ -215,11 +217,15 @@ public class InventoryWarningService {
             throw new BusinessException("该商品在该仓库的预警配置已存在");
         }
 
+        BigDecimal stockOutLimit = request.getStockOutLimit() == null ? BigDecimal.ZERO : request.getStockOutLimit();
+        BigDecimal stockOverLimit = request.getStockOverLimit() == null ? BigDecimal.ZERO : request.getStockOverLimit();
+        validateLimits(stockOutLimit, stockOverLimit);
+
         InventoryWarningConfig config = new InventoryWarningConfig();
         config.setProductId(request.getProductId());
         config.setWarehouseId(request.getWarehouseId());
-        config.setStockOutLimit(request.getStockOutLimit() != null ? request.getStockOutLimit() : BigDecimal.ZERO);
-        config.setStockOverLimit(request.getStockOverLimit() != null ? request.getStockOverLimit() : BigDecimal.ZERO);
+        config.setStockOutLimit(stockOutLimit);
+        config.setStockOverLimit(stockOverLimit);
         config.setWarningLevel(request.getWarningLevel() != null ? request.getWarningLevel() : "NORMAL");
         config.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
 
@@ -232,8 +238,11 @@ public class InventoryWarningService {
     public void updateWarningConfig(Long id, InventoryWarningDtos.UpdateConfigRequest request, TokenStore.LoginUser user) {
         InventoryWarningConfig config = requireConfig(id);
 
-        config.setStockOutLimit(request.getStockOutLimit() != null ? request.getStockOutLimit() : config.getStockOutLimit());
-        config.setStockOverLimit(request.getStockOverLimit() != null ? request.getStockOverLimit() : config.getStockOverLimit());
+        BigDecimal stockOutLimit = request.getStockOutLimit() == null ? config.getStockOutLimit() : request.getStockOutLimit();
+        BigDecimal stockOverLimit = request.getStockOverLimit() == null ? config.getStockOverLimit() : request.getStockOverLimit();
+        validateLimits(stockOutLimit, stockOverLimit);
+        config.setStockOutLimit(stockOutLimit);
+        config.setStockOverLimit(stockOverLimit);
         config.setWarningLevel(request.getWarningLevel() != null ? request.getWarningLevel() : config.getWarningLevel());
         config.setIsActive(request.getIsActive() != null ? request.getIsActive() : config.getIsActive());
 
@@ -254,8 +263,8 @@ public class InventoryWarningService {
         configMapper.batchUpdateActiveStatus(ids, isActive);
     }
 
-    /** 检查并生成预警 */
     @Transactional
+    @Scheduled(fixedDelayString = "${erp.inventory.warning-check-delay:PT10M}")
     public void checkAndGenerateWarnings() {
         // 获取所有激活的预警配置
         List<InventoryWarningConfig> configs = configMapper.selectList(Wrappers.emptyWrapper());
@@ -311,7 +320,8 @@ public class InventoryWarningService {
     private void createOrUpdateWarning(String warningType, Long productId, Long warehouseId,
                                      BigDecimal currentQty, BigDecimal warningValue) {
         // 检查是否已存在激活的预警
-        List<InventoryWarning> existing = warningMapper.selectActiveWarningsByProduct(productId, warehouseId);
+        List<InventoryWarning> existing = warningMapper.selectActiveWarningsByProduct(
+                warningType, productId, warehouseId);
 
         if (existing.isEmpty()) {
             // 创建新预警
@@ -344,6 +354,15 @@ public class InventoryWarningService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    private void validateLimits(BigDecimal stockOutLimit, BigDecimal stockOverLimit) {
+        if (stockOutLimit == null || stockOverLimit == null
+                || stockOutLimit.signum() < 0 || stockOverLimit.signum() < 0) {
+            throw new BusinessException("预警阈值不能为负数");
+        }
+        if (stockOverLimit.compareTo(stockOutLimit) < 0) {
+            throw new BusinessException("库存上限不能低于库存下限");
+        }
+    }
     private BigDecimal getProductPrice(Long productId) {
         Product product = productMapper.selectById(productId);
         return product != null && product.getSalePrice() != null ? product.getSalePrice() : BigDecimal.ZERO;
