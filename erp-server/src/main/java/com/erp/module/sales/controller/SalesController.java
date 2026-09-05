@@ -29,6 +29,17 @@ public class SalesController {
     private final SalesOrderService orderService;
     private final SalesOutboundService outboundService;
 
+    /**
+     * 查询客户信用额度状态（服务端重新计算，供创建订单前预警）
+     */
+    @GetMapping("/customers/{customerId}/credit-status")
+    public Result<SalesOrderDtos.CreditStatus> creditStatus(
+            @PathVariable Long customerId,
+            @RequestParam(required = false) java.math.BigDecimal orderAmount,
+            HttpServletRequest httpRequest) {
+        return Result.ok(orderService.creditStatus(customerId, orderAmount, currentUser(httpRequest)));
+    }
+
     // ===== 销售订单 =====
 
     /**
@@ -143,8 +154,8 @@ public class SalesController {
     public Result<Object> orderStats(HttpServletRequest httpRequest) {
         TokenStore.LoginUser user = currentUser(httpRequest);
         return Result.ok(new Object() {
-            public int draftCount = orderService.countDraftOrders();
-            public int unshippedCount = orderService.countUnshippedOrders();
+            public int draftCount = orderService.countDraftOrders(user);
+            public int unshippedCount = orderService.countUnshippedOrders(user);
         });
     }
 
@@ -155,8 +166,8 @@ public class SalesController {
     public Result<Object> outboundStats(HttpServletRequest httpRequest) {
         TokenStore.LoginUser user = currentUser(httpRequest);
         return Result.ok(new Object() {
-            public int draftCount = outboundService.countDraftOutbounds();
-            public int unpaidCount = outboundService.countUnpaidOutbounds();
+            public int draftCount = outboundService.countDraftOutbounds(user);
+            public int unpaidCount = outboundService.countUnpaidOutbounds(user);
         });
     }
 

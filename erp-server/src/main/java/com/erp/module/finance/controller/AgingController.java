@@ -4,9 +4,11 @@ import com.erp.common.Result;
 import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.finance.service.ReceivableService;
 import com.erp.module.finance.service.AgingUpdateService;
+import com.erp.module.system.TokenStore;
 import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * 账龄管理Controller
@@ -24,7 +26,7 @@ public class AgingController {
      */
     @PutMapping("/receivable/{receivableId}")
     public Result<Void> updateAgingForReceivable(@PathVariable Long receivableId) {
-        agingUpdateService.updateAgingForReceivable(receivableId);
+        agingUpdateService.updateAgingForReceivable(receivableId, TokenStore.getCurrentLoginUser());
         return Result.ok();
     }
 
@@ -33,7 +35,7 @@ public class AgingController {
      */
     @PutMapping("/customer/{customerId}")
     public Result<Void> updateAgingForCustomer(@PathVariable Long customerId) {
-        agingUpdateService.updateAgingForCustomer(customerId);
+        agingUpdateService.updateAgingForCustomer(customerId, TokenStore.getCurrentLoginUser());
         return Result.ok();
     }
 
@@ -41,8 +43,11 @@ public class AgingController {
      * 获取账龄统计信息
      */
     @GetMapping("/statistics")
-    public Result<AgingUpdateService.AgingStatistics> getAgingStatistics() {
-        AgingUpdateService.AgingStatistics statistics = agingUpdateService.getAgingStatistics();
+    public Result<AgingUpdateService.AgingStatistics> getAgingStatistics(
+            @RequestParam(required = false) String cutoffDate) {
+        LocalDate cutoff = cutoffDate == null ? LocalDate.now() : LocalDate.parse(cutoffDate);
+        AgingUpdateService.AgingStatistics statistics = agingUpdateService.getAgingStatistics(
+                cutoff, TokenStore.getCurrentLoginUser());
         return Result.ok(statistics);
     }
 
@@ -50,20 +55,25 @@ public class AgingController {
      * 获取账龄分析数据
      */
     @GetMapping("/analysis")
-    public Result<java.util.List<ReceivableDtos.AgingAnalysisResponse>> getAgingAnalysis() {
-        return Result.ok(receivableService.getAgingAnalysis());
+    public Result<java.util.List<ReceivableDtos.AgingAnalysisResponse>> getAgingAnalysis(
+            @RequestParam(required = false) String cutoffDate) {
+        LocalDate cutoff = cutoffDate == null ? LocalDate.now() : LocalDate.parse(cutoffDate);
+        return Result.ok(receivableService.getAgingAnalysis(cutoff, TokenStore.getCurrentLoginUser()));
     }
 
     /**
      * 获取催收建议
      */
     @GetMapping("/collection-advice")
-    public Result<String> getCollectionAdvice() {
+    public Result<String> getCollectionAdvice(
+            @RequestParam(required = false) String cutoffDate) {
         // 根据账龄分析结果生成催收建议
         StringBuilder advice = new StringBuilder();
 
         // 获取账龄统计
-        AgingUpdateService.AgingStatistics statistics = agingUpdateService.getAgingStatistics();
+        AgingUpdateService.AgingStatistics statistics = agingUpdateService.getAgingStatistics(
+                cutoffDate == null ? LocalDate.now() : LocalDate.parse(cutoffDate),
+                TokenStore.getCurrentLoginUser());
 
         // 生成建议
         if (statistics.getBucketOver90Count() > 0) {
@@ -101,10 +111,13 @@ public class AgingController {
      * 获取账龄预警
      */
     @GetMapping("/warnings")
-    public Result<String> getAgingWarnings() {
+    public Result<String> getAgingWarnings(
+            @RequestParam(required = false) String cutoffDate) {
         StringBuilder warnings = new StringBuilder();
 
-        AgingUpdateService.AgingStatistics statistics = agingUpdateService.getAgingStatistics();
+        AgingUpdateService.AgingStatistics statistics = agingUpdateService.getAgingStatistics(
+                cutoffDate == null ? LocalDate.now() : LocalDate.parse(cutoffDate),
+                TokenStore.getCurrentLoginUser());
 
         // 设置预警阈值
         int highRiskThreshold = 5; // 高风险客户数量阈值

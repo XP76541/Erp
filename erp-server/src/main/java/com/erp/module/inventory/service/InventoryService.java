@@ -8,7 +8,6 @@ import com.erp.module.inventory.mapper.InventoryMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -39,6 +38,7 @@ public class InventoryService {
     public void stockIn(String docType, Long docId, String docNo,
                         Long productId, Long warehouseId, BigDecimal qty, BigDecimal price,
                         LocalDate bizDate) {
+        validateStockInput(productId, warehouseId, qty, price);
         Inventory inv = inventoryMapper.selectForUpdate(productId, warehouseId);
         BigDecimal amount = qty.multiply(price).setScale(2, RoundingMode.HALF_UP);
 
@@ -137,8 +137,9 @@ public class InventoryService {
     public BigDecimal stockOut(String docType, Long docId, String docNo,
                          Long productId, Long warehouseId, BigDecimal qty,
                          LocalDate bizDate) {
+        validateStockInput(productId, warehouseId, qty, null);
         Inventory inv = inventoryMapper.selectForUpdate(productId, warehouseId);
-        if (inv == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+        if (inv == null) {
             throw new IllegalStateException(
                     "库存不足:商品 " + productId + " 在仓库 " + warehouseId + " 无结存,需出库 " + qty);
         }
@@ -172,6 +173,18 @@ public class InventoryService {
         ledger.balanceAmount = newAmount;
         writeLedger(docType, docId, docNo, productId, warehouseId, ledger, bizDate);
         return avgCost;
+    }
+
+    private void validateStockInput(Long productId, Long warehouseId, BigDecimal qty, BigDecimal price) {
+        if (productId == null || warehouseId == null) {
+            throw new IllegalArgumentException("商品和仓库不能为空");
+        }
+        if (qty == null || qty.signum() <= 0 || qty.scale() > 4) {
+            throw new IllegalArgumentException("库存数量必须大于0且最多4位小数");
+        }
+        if (price != null && (price.signum() < 0 || price.scale() > 4)) {
+            throw new IllegalArgumentException("库存单价不能为负且最多4位小数");
+        }
     }
 
     private void writeLedger(String docType, Long docId, String docNo,

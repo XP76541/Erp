@@ -121,6 +121,19 @@ public class SalesOutboundService {
         }
         authorizationService.requireUnrestrictedOrSalesperson(user, order.getSalespersonId());
 
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new BusinessException("发货明细不能为空");
+        }
+        java.util.Set<Long> orderItemIds = new java.util.HashSet<>();
+        for (ItemInput input : request.getItems()) {
+            if (input.getOrderItemId() == null || input.getQty() == null || input.getQty().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException("发货明细的商品和数量必须有效");
+            }
+            if (!orderItemIds.add(input.getOrderItemId())) {
+                throw new BusinessException("发货明细不能重复");
+            }
+        }
+
         Customer customer = customerMapper.selectById(order.getCustomerId());
         if (customer == null || customer.getIsActive() == 0) {
             throw new BusinessException("客户不存在或已停用");
@@ -176,6 +189,7 @@ public class SalesOutboundService {
             outboundItem.setOrderItemId(input.getOrderItemId());
             outboundItem.setLineNo(lineNo);
             outboundItem.setProductId(orderItem.getProductId());
+            outboundItem.setWarehouseId(request.getWarehouseId());
             outboundItem.setQty(input.getQty());
             outboundItem.setPrice(orderItem.getPrice());
             outboundItem.setAmount(input.getQty().multiply(orderItem.getPrice()).setScale(2, RoundingMode.HALF_UP));
@@ -203,6 +217,9 @@ public class SalesOutboundService {
      */
     @Transactional
     public void audit(Long id, TokenStore.LoginUser user, String ip) {
+        SalesOutbound existing = requireOutbound(id);
+        requireSalespersonAccess(existing, user);
+
         // ① 抢占状态机:并发双击审核只有一次生效,失败者读到已审状态报错回滚
         if (outboundMapper.claimAudit(id, user.userId()) == 0) {
             throw new BusinessException("单据不存在或不是草稿状态,无法审核");
@@ -213,13 +230,20 @@ public class SalesOutboundService {
         // ② 库存出库:调用 InventoryService.stockOut
         List<SalesOutboundItem> items = outboundItemMapper.selectByOutboundId(id);
         for (SalesOutboundItem item : items) {
-            // 更新订单发货数量
-            orderItemMapper.updateShippedQty(item.getOrderItemId(), item.getLineNo(), item.getQty());
+            // 更新订单发货数量，按订单明细主键原子累加并再次校验剩余数量
+            if (orderItemMapper.updateShippedQty(item.getOrderItemId(), item.getQty()) == 0) {
+                throw new BusinessException("发货数量超过订单剩余数量");
+            }
 
             // 库存出库
-            inventoryService.stockOut("SALES_OUT", outbound.getId(), outbound.getDocNo(),
+            BigDecimal costPrice = inventoryService.stockOut("SALES_OUT", outbound.getId(), outbound.getDocNo(),
                     item.getProductId(), outbound.getWarehouseId(), item.getQty(),
                     outbound.getBizDate());
+            item.setCostPrice(costPrice.setScale(2, RoundingMode.HALF_UP));
+            item.setCostAmount(costPrice.multiply(item.getQty()).setScale(2, RoundingMode.HALF_UP));
+            if (outboundItemMapper.updateById(item) != 1) {
+                throw new BusinessException("出库成本快照保存失败");
+            }
         }
 
         // ③ 生成应收
@@ -229,6 +253,8 @@ public class SalesOutboundService {
         }
 
         Receivable receivable = new Receivable();
+        receivable.setDocType("SALES_OUT");
+        receivable.setDocId(outbound.getId());
         receivable.setDocNo(docSequenceService.nextDocNo("REC", "REC", LocalDate.now().format(PERIOD)));
         receivable.setOrderId(outbound.getOrderId());
         SalesOrder order = orderMapper.selectById(outbound.getOrderId());
@@ -264,6 +290,9 @@ public class SalesOutboundService {
      */
     @Transactional
     public void reject(Long id, TokenStore.LoginUser user, String ip) {
+        SalesOutbound existing = requireOutbound(id);
+        requireSalespersonAccess(existing, user);
+
         // ① 抢占状态机:并发双击驳回只有一次生效
         if (outboundMapper.claimReject(id, user.userId()) == 0) {
             throw new BusinessException("单据不存在或不是草稿状态,无法驳回");
@@ -314,12 +343,24 @@ public class SalesOutboundService {
 
     /** 查询待审核的出库单数量 */
     public int countDraftOutbounds() {
-        return outboundMapper.countDraftOutbounds();
+        return countDraftOutbounds(null);
+    }
+
+    public int countDraftOutbounds(TokenStore.LoginUser user) {
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        return scope == null ? outboundMapper.countDraftOutbounds() : outboundMapper.countDraftOutboundsBySalesperson(scope);
     }
 
     /** 查询已审核未收款的数量 */
     public int countUnpaidOutbounds() {
-        return outboundMapper.countUnpaidOutbounds();
+        return countUnpaidOutbounds(null);
+    }
+
+    public int countUnpaidOutbounds(TokenStore.LoginUser user) {
+        // 未收款统计需要沿销售订单业务员范围过滤，避免销售员看到全量数据。
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        if (scope == null) return outboundMapper.countUnpaidOutbounds();
+        return outboundMapper.countUnpaidOutboundsBySalesperson(scope);
     }
 
     /** 更新订单发货状态 */

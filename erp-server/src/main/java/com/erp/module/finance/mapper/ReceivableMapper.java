@@ -17,7 +17,8 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
 
     /** 查询客户当前未核销应收余额，用于销售审核信用控制 */
     @Select("SELECT COALESCE(SUM(remaining_amount), 0) FROM receivable " +
-            "WHERE customer_id = #{customerId} AND remaining_amount > 0")
+            "WHERE customer_id = #{customerId} AND status IN ('UNSETTLED', 'PARTIAL') " +
+            "AND remaining_amount > 0")
     BigDecimal sumOutstandingByCustomerId(@Param("customerId") Long customerId);
 
     @Select("SELECT * FROM receivable WHERE customer_id = #{customerId} AND status IN ('UNSETTLED', 'PARTIAL') ORDER BY due_date")
@@ -26,8 +27,23 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
     /**
      * 获取指定日期范围内的应收账款
      */
-    @Select("SELECT * FROM receivable WHERE business_date BETWEEN #{startDate} AND #{endDate} ORDER BY business_date")
+    @Select("SELECT * FROM receivable WHERE customer_id = #{customerId} " +
+            "AND biz_date BETWEEN #{startDate} AND #{endDate} ORDER BY biz_date")
+    List<Receivable> getByCustomerAndDateRange(@Param("customerId") Long customerId,
+                                               @Param("startDate") LocalDate startDate,
+                                               @Param("endDate") LocalDate endDate);
+
+    @Select("SELECT * FROM receivable WHERE customer_id = #{customerId} " +
+            "AND biz_date < #{beforeDate} ORDER BY biz_date")
+    List<Receivable> getByCustomerBeforeDate(@Param("customerId") Long customerId,
+                                             @Param("beforeDate") LocalDate beforeDate);
+
+    /** 兼容旧调用方；新业务必须使用带客户条件的方法。 */
+    @Select("SELECT * FROM receivable WHERE biz_date BETWEEN #{startDate} AND #{endDate} ORDER BY biz_date")
     List<Receivable> getByDateRange(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    @Select("SELECT * FROM receivable WITH (UPDLOCK, ROWLOCK) WHERE id = #{id}")
+    Receivable selectForUpdate(@Param("id") Long id);
 
     /**
      * 更新付款金额和状态
@@ -42,48 +58,67 @@ public interface ReceivableMapper extends BaseMapper<Receivable> {
             "WHERE id = #{id} AND amount - received_amount >= #{amount}")
     int updatePaidAmount(@Param("id") Long id, @Param("amount") BigDecimal amount);
 
-    /**
-     * 获取客户应收账款统计
-     */
-    @Select("SELECT " +
-            "customer_id, " +
-            "SUM(amount) as total_amount, " +
-            "SUM(paid_amount) as total_paid, " +
-            "SUM(remaining_amount) as total_remaining, " +
-            "SUM(CASE WHEN status = 'UNSETTLED' THEN remaining_amount ELSE 0 END) as unsettled_amount, " +
-            "SUM(CASE WHEN status = 'PARTIAL' THEN remaining_amount ELSE 0 END) as partial_amount, " +
-            "SUM(CASE WHEN status = 'SETTLED' THEN remaining_amount ELSE 0 END) as settled_amount " +
-            "FROM receivable " +
-            "GROUP BY customer_id")
-    List<ReceivableStatistics> getCustomerReceivableStatistics();
+    @Select({"<script>",
+            "SELECT customer_id, ",
+            "SUM(COALESCE(amount, 0)) as total_amount, ",
+            "SUM(COALESCE(received_amount, 0)) as total_paid, ",
+            "SUM(COALESCE(remaining_amount, 0)) as total_remaining, ",
+            "SUM(CASE WHEN status = 'UNSETTLED' THEN COALESCE(remaining_amount, 0) ELSE 0 END) as unsettled_amount, ",
+            "SUM(CASE WHEN status = 'PARTIAL' THEN COALESCE(remaining_amount, 0) ELSE 0 END) as partial_amount, ",
+            "SUM(CASE WHEN status = 'SETTLED' THEN COALESCE(remaining_amount, 0) ELSE 0 END) as settled_amount ",
+            "FROM receivable ",
+            "<if test='customerIds != null'>WHERE customer_id IN ",
+            "<foreach collection='customerIds' item='customerId' open='(' separator=',' close=')'>#{customerId}</foreach>",
+            "</if>",
+            "GROUP BY customer_id", "</script>"})
+    List<ReceivableStatistics> getCustomerReceivableStatisticsScoped(@Param("customerIds") List<Long> customerIds);
 
     /**
-     * 获取账龄分析数据
+     * 获取账龄分析数据（截止日期由调用方明确传入，避免历史查询依赖服务器当前日期）。
      */
-    @Select("SELECT CASE " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) < 0 THEN '未到期' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 0 AND 30 THEN '1-30天' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 31 AND 60 THEN '31-60天' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 61 AND 90 THEN '61-90天' " +
-            "   ELSE '90天以上' END as aging_bucket, " +
-            "SUM(amount) as total_amount, SUM(received_amount) as total_paid, " +
-            "SUM(amount - received_amount) as total_remaining " +
-            "FROM receivable GROUP BY CASE " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) < 0 THEN '未到期' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 0 AND 30 THEN '1-30天' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 31 AND 60 THEN '31-60天' " +
-            "   WHEN DATEDIFF(day, due_date, CAST(GETDATE() AS date)) BETWEEN 61 AND 90 THEN '61-90天' " +
-            "   ELSE '90天以上' END")
-    List<AgingAnalysis> getAgingAnalysis();
+    @Select({"<script>",
+            "SELECT q.aging_bucket, ",
+            "SUM(q.amount) as total_amount, SUM(q.received_amount) as total_paid, ",
+            "SUM(q.remaining_amount) as total_remaining ",
+            "FROM (SELECT CASE ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) &lt; 0 THEN '未到期' ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) BETWEEN 0 AND 30 THEN '1-30天' ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) BETWEEN 31 AND 60 THEN '31-60天' ",
+            "   WHEN DATEDIFF(day, due_date, #{cutoffDate}) BETWEEN 61 AND 90 THEN '61-90天' ",
+            "   ELSE '90天以上' END AS aging_bucket, amount, received_amount, remaining_amount ",
+            "FROM receivable ",
+            "WHERE remaining_amount > 0 AND biz_date &lt;= #{cutoffDate} ",
+            "<if test='customerIds != null and customerIds.size() > 0'>",
+            "AND customer_id IN ",
+            "<foreach collection='customerIds' item='customerId' open='(' separator=',' close=')'>#{customerId}</foreach>",
+            "</if>) q ",
+            "GROUP BY q.aging_bucket",
+            "</script>"})
+    List<AgingAnalysis> getAgingAnalysis(@Param("cutoffDate") LocalDate cutoffDate,
+                                         @Param("customerIds") List<Long> customerIds);
 
-    /**
-     * 获取超期应收账款
-     */
-    @Select("SELECT *, DATEDIFF(day, due_date, CAST(GETDATE() AS date)) as days_overdue " +
-            "FROM receivable " +
-            "WHERE due_date < CAST(GETDATE() AS date) AND remaining_amount > 0 " +
-            "ORDER BY days_overdue DESC")
-    List<Receivable> getOverdueReceivables();
+    /** 兼容旧调用，默认使用当天且不限制客户范围。 */
+    default List<AgingAnalysis> getAgingAnalysis() {
+        return getAgingAnalysis(LocalDate.now(), null);
+    }
+
+    /** 获取截止日期前的逾期应收账款。 */
+    @Select({"<script>",
+            "SELECT * FROM receivable ",
+            "WHERE due_date &lt; #{cutoffDate} AND biz_date &lt;= #{cutoffDate} AND remaining_amount > 0 ",
+            "<if test='customerIds != null and customerIds.size() > 0'>",
+            "AND customer_id IN ",
+            "<foreach collection='customerIds' item='customerId' open='(' separator=',' close=')'>#{customerId}</foreach>",
+            "</if>",
+            "ORDER BY DATEDIFF(day, due_date, #{cutoffDate}) DESC",
+            "</script>"})
+    List<Receivable> getOverdueReceivables(@Param("cutoffDate") LocalDate cutoffDate,
+                                           @Param("customerIds") List<Long> customerIds);
+
+    /** 兼容旧调用，默认使用当天且不限制客户范围。 */
+    default List<Receivable> getOverdueReceivables() {
+        return getOverdueReceivables(LocalDate.now(), null);
+    }
 
     @Data
     static class ReceivableStatistics {

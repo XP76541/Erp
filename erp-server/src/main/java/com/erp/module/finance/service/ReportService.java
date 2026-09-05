@@ -1,7 +1,6 @@
 package com.erp.module.finance.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.erp.common.PageResult;
 import com.erp.module.masterdata.entity.Customer;
 import com.erp.module.masterdata.entity.Product;
 import com.erp.module.masterdata.entity.Warehouse;
@@ -13,14 +12,17 @@ import com.erp.module.purchase.mapper.PurchaseInboundItemMapper;
 import com.erp.module.purchase.mapper.PurchaseInboundMapper;
 import com.erp.module.sales.entity.SalesOutbound;
 import com.erp.module.sales.entity.SalesOutboundItem;
+import com.erp.module.sales.entity.SalesOrder;
 import com.erp.module.sales.mapper.SalesOutboundMapper;
 import com.erp.module.sales.mapper.SalesOutboundItemMapper;
+import com.erp.module.sales.mapper.SalesOrderMapper;
 import com.erp.module.finance.entity.Payable;
 import com.erp.module.finance.mapper.PayableMapper;
 import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.mapper.ReceivableMapper;
 import com.erp.module.finance.dto.ReportDtos;
-import com.erp.module.inventory.service.InventoryService;
+import com.erp.module.inventory.entity.InventoryLedger;
+import com.erp.module.inventory.mapper.InventoryLedgerMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -41,6 +43,7 @@ public class ReportService {
 
     private final SalesOutboundMapper outboundMapper;
     private final SalesOutboundItemMapper outboundItemMapper;
+    private final SalesOrderMapper salesOrderMapper;
     private final PurchaseInboundMapper purchaseInboundMapper;
     private final PurchaseInboundItemMapper purchaseInboundItemMapper;
     private final ReceivableMapper receivableMapper;
@@ -48,7 +51,7 @@ public class ReportService {
     private final CustomerMapper customerMapper;
     private final ProductMapper productMapper;
     private final WarehouseMapper warehouseMapper;
-    private final InventoryService inventoryService;
+    private final InventoryLedgerMapper inventoryLedgerMapper;
 
     /**
      * 销售日报表
@@ -63,59 +66,55 @@ public class ReportService {
         if (endDate == null) {
             endDate = LocalDate.now(); // 默认今天
         }
+        if (startDate.isAfter(endDate)) {
+            throw new com.erp.common.BusinessException("报表日期范围无效");
+        }
+        // 在数据库侧限定已审核及销售员范围，避免先取全量数据后过滤造成越权。
+        List<SalesOutbound> outbounds = request.getSalespersonId() == null
+                ? outboundMapper.selectAuditedByDateRange(startDate, endDate)
+                : outboundMapper.selectAuditedByDateRangeAndSalesperson(startDate, endDate, request.getSalespersonId());
+        outbounds = outbounds.stream()
+                .filter(outbound -> request.getCustomerId() == null || request.getCustomerId().equals(outbound.getCustomerId()))
+                .toList();
 
-        // 查询日期范围内的出库单
-        List<SalesOutbound> outbounds = outboundMapper.selectByDateRange(startDate, endDate);
+        Map<Long, SalesOrder> ordersById = outbounds.isEmpty() ? Collections.emptyMap()
+                : salesOrderMapper.selectBatchIds(outbounds.stream()
+                        .map(SalesOutbound::getOrderId).filter(Objects::nonNull).distinct().toList())
+                .stream().collect(Collectors.toMap(SalesOrder::getId, o -> o));
+        Map<Long, Customer> customersById = outbounds.isEmpty() ? Collections.emptyMap()
+                : customerMapper.selectBatchIds(outbounds.stream()
+                        .map(SalesOutbound::getCustomerId).filter(Objects::nonNull).distinct().toList())
+                .stream().collect(Collectors.toMap(Customer::getId, c -> c));
+        Map<Long, List<SalesOutboundItem>> itemsByOutboundId = outbounds.isEmpty() ? Collections.emptyMap()
+                : outboundItemMapper.selectByOutboundIds(outbounds.stream().map(SalesOutbound::getId).toList())
+                .stream().collect(Collectors.groupingBy(SalesOutboundItem::getOutboundId));
 
-        // 按日期分组
         Map<LocalDate, List<SalesOutbound>> dateGroup = outbounds.stream()
                 .collect(Collectors.groupingBy(SalesOutbound::getBizDate));
-
         List<ReportDtos.SalesDailyReportResponse> responses = new ArrayList<>();
-
-        for (LocalDate date : dateGroup.keySet().stream().sorted().collect(Collectors.toList())) {
+        for (LocalDate date : dateGroup.keySet().stream().sorted().toList()) {
             ReportDtos.SalesDailyReportResponse response = new ReportDtos.SalesDailyReportResponse();
             response.setReportDate(date);
-
-            List<SalesOutbound> dayOutbounds = dateGroup.get(date).stream()
-                    .filter(outbound -> request.getCustomerId() == null || request.getCustomerId().equals(outbound.getCustomerId()))
-                    .toList();
-            Long totalOrders = (long) dayOutbounds.size();
-
+            List<SalesOutbound> dayOutbounds = dateGroup.get(date);
             BigDecimal totalAmount = BigDecimal.ZERO;
             BigDecimal shippedAmount = BigDecimal.ZERO;
             List<ReportDtos.SalesDailyReportItem> items = new ArrayList<>();
-
             for (SalesOutbound outbound : dayOutbounds) {
                 ReportDtos.SalesDailyReportItem item = new ReportDtos.SalesDailyReportItem();
-                item.setDocNo(outbound.getDocNo());
-                item.setBusinessDate(outbound.getBizDate());
-                item.setAmount(outbound.getTotalAmount());
-                totalAmount = totalAmount.add(outbound.getTotalAmount());
-
-                // 获取客户信息
-                Customer customer = customerMapper.selectById(outbound.getCustomerId());
-                item.setCustomerName(customer != null ? customer.getName() : "");
-
-                // 获取出库明细计算已发货金额
-                List<SalesOutboundItem> outboundItems = outboundItemMapper.selectByOutboundId(outbound.getId());
-                BigDecimal dayShippedAmount = outboundItems.stream()
-                        .map(SalesOutboundItem::getAmount)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                item.setShippedAmount(dayShippedAmount);
-                shippedAmount = shippedAmount.add(dayShippedAmount);
-
-                item.setStatus(outbound.getStatus());
-                items.add(item);
+                item.setDocNo(outbound.getDocNo()); item.setBusinessDate(outbound.getBizDate());
+                BigDecimal amount = safe(outbound.getTotalAmount()); item.setAmount(amount); totalAmount = totalAmount.add(amount);
+                Customer customer = customersById.get(outbound.getCustomerId());
+                item.setCustomerName(customer == null ? "" : customer.getName());
+                SalesOrder order = ordersById.get(outbound.getOrderId());
+                item.setSalespersonName(order == null ? "" : String.valueOf(order.getSalespersonId()));
+                BigDecimal shipped = itemsByOutboundId.getOrDefault(outbound.getId(), List.of()).stream()
+                        .map(SalesOutboundItem::getAmount).map(ReportService::safe).reduce(BigDecimal.ZERO, BigDecimal::add);
+                item.setShippedAmount(shipped); shippedAmount = shippedAmount.add(shipped);
+                item.setStatus(outbound.getStatus()); items.add(item);
             }
-
-            response.setTotalOrders(totalOrders);
-            response.setTotalAmount(totalAmount);
-            response.setShippedAmount(shippedAmount);
-            response.setOrders(items);
-            responses.add(response);
+            response.setTotalOrders((long) dayOutbounds.size()); response.setTotalAmount(totalAmount);
+            response.setShippedAmount(shippedAmount); response.setOrders(items); responses.add(response);
         }
-
         return responses;
     }
 
@@ -145,11 +144,12 @@ public class ReportService {
 
             // 获取该仓库所有商品的库存
             // 这里假设有一个方法可以查询指定仓库的库存，如果没有，需要从inventory表查询
-            Map<Long, BigDecimal> warehouseStocks = getStocksByWarehouse(warehouse.getId(), date);
+            Map<Long, InventoryLedger> warehouseStocks = getStocksByWarehouse(warehouse.getId(), date);
 
-            for (Map.Entry<Long, BigDecimal> entry : warehouseStocks.entrySet()) {
+            for (Map.Entry<Long, InventoryLedger> entry : warehouseStocks.entrySet()) {
                 Long productId = entry.getKey();
-                BigDecimal quantity = entry.getValue();
+                InventoryLedger snapshot = entry.getValue();
+                BigDecimal quantity = safe(snapshot.getBalanceQty());
 
                 // 如果指定了商品，跳过其他商品
                 if (request.getProductId() != null && !productId.equals(request.getProductId())) {
@@ -161,9 +161,9 @@ public class ReportService {
                     continue;
                 }
 
-                // 计算库存价值（使用移动加权平均成本）
-                BigDecimal unitCost = getUnitCost(productId, date);
-                BigDecimal totalValueForItem = quantity.multiply(unitCost);
+                // 使用截至报表日期的流水结存快照，不读取即时库存表。
+                BigDecimal unitCost = request.isIncludeCost() && quantity.signum() != 0
+                        ? safe(snapshot.getBalanceAmount()).divide(quantity, 4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
 
                 ReportDtos.InventorySummaryItem item = new ReportDtos.InventorySummaryItem();
                 item.setProductId(productId);
@@ -173,6 +173,7 @@ public class ReportService {
                 item.setWarehouseName(warehouse.getName());
                 item.setQuantity(quantity);
                 item.setUnitCost(unitCost);
+                BigDecimal totalValueForItem = request.isIncludeCost() ? safe(snapshot.getBalanceAmount()) : BigDecimal.ZERO;
                 item.setTotalValue(totalValueForItem);
 
                 items.add(item);
@@ -199,25 +200,28 @@ public class ReportService {
         if (endDate == null) {
             endDate = LocalDate.now(); // 默认今天
         }
+        if (startDate.isAfter(endDate)) {
+            throw new com.erp.common.BusinessException("报表日期范围无效");
+        }
 
         ReportDtos.FinanceSummaryResponse response = new ReportDtos.FinanceSummaryResponse();
         response.setReportDate(endDate);
 
         // 计算销售额（从已审核的出库单统计）
-        BigDecimal totalSales = outboundMapper.selectList(Wrappers.<SalesOutbound>lambdaQuery()
-                        .eq(SalesOutbound::getStatus, "AUDITED")
-                        .between(SalesOutbound::getBizDate, startDate, endDate))
-                .stream()
-                .map(SalesOutbound::getTotalAmount)
+        List<SalesOutbound> salesOutbounds = request.getSalespersonId() == null
+                ? outboundMapper.selectAuditedByDateRange(startDate, endDate)
+                : outboundMapper.selectAuditedByDateRangeAndSalesperson(startDate, endDate, request.getSalespersonId());
+        BigDecimal totalSales = salesOutbounds.stream()
+                .map(SalesOutbound::getTotalAmount).map(ReportService::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算采购额（从采购入库单统计，这里需要添加相应的查询）
-        BigDecimal totalPurchases = purchaseInboundMapper.selectByDateRange(startDate.toString(), endDate.toString()).stream()
-                .filter(doc -> "AUDITED".equals(doc.getStatus()))
+        List<com.erp.module.purchase.entity.PurchaseInbound> inbounds = purchaseInboundMapper.selectByDateRange(startDate.toString(), endDate.toString()).stream()
+                .filter(doc -> "AUDITED".equals(doc.getStatus())).toList();
+        BigDecimal totalPurchases = inbounds.stream()
                 .flatMap(doc -> purchaseInboundItemMapper.selectList(Wrappers.<com.erp.module.purchase.entity.PurchaseInboundItem>lambdaQuery()
                         .eq(com.erp.module.purchase.entity.PurchaseInboundItem::getInboundId, doc.getId())).stream())
-                .map(com.erp.module.purchase.entity.PurchaseInboundItem::getAmount)
-                .filter(java.util.Objects::nonNull)
+                .map(com.erp.module.purchase.entity.PurchaseInboundItem::getAmount).map(ReportService::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算应收账款余额
@@ -242,8 +246,8 @@ public class ReportService {
         // 计算库存总值
         BigDecimal totalInventory = getInventoryTotalValue(endDate);
 
-        // 计算净利润
-        BigDecimal netProfit = totalSales.subtract(totalPurchases);
+        // 当前出库明细没有成本快照字段，不能用销售额减采购额冒充毛利。
+        BigDecimal netProfit = null;
 
         response.setTotalSales(totalSales);
         response.setTotalPurchases(totalPurchases);
@@ -251,52 +255,37 @@ public class ReportService {
         response.setTotalPayables(totalPayables);
         response.setTotalInventory(totalInventory);
         response.setNetProfit(netProfit);
+        response.setCostDataAvailable(false);
 
         return response;
     }
 
-    /**
-     * 获取指定仓库的库存
-     */
-    private Map<Long, BigDecimal> getStocksByWarehouse(Long warehouseId, LocalDate date) {
-        return inventoryService.getWarehouseStocks(warehouseId);
+    private boolean hasSalesperson(SalesOutbound outbound, Long salespersonId) {
+        var order = salesOrderMapper.selectById(outbound.getOrderId());
+        return order != null && salespersonId.equals(order.getSalespersonId());
+    }
+
+    private Map<Long, InventoryLedger> getStocksByWarehouse(Long warehouseId, LocalDate date) {
+        return inventoryLedgerMapper.selectLatestByWarehouseAsOf(warehouseId, date).stream()
+                .collect(Collectors.toMap(InventoryLedger::getProductId, ledger -> ledger,
+                        (first, second) -> first, LinkedHashMap::new));
+    }
+
+    private static BigDecimal safe(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     /**
-     * 获取商品的单位成本
-     */
-    private BigDecimal getUnitCost(Long productId, LocalDate date) {
-        // 查询所有仓库的平均成本
-        List<Warehouse> warehouses = warehouseMapper.selectList(Wrappers.emptyWrapper());
-        BigDecimal totalCost = BigDecimal.ZERO;
-        BigDecimal totalQty = BigDecimal.ZERO;
-
-        for (Warehouse warehouse : warehouses) {
-            BigDecimal cost = inventoryService.getUnitCost(productId, warehouse.getId());
-            BigDecimal qty = inventoryService.getStockQuantity(productId, warehouse.getId());
-            totalCost = totalCost.add(cost.multiply(qty));
-            totalQty = totalQty.add(qty);
-        }
-
-        if (totalQty.compareTo(BigDecimal.ZERO) == 0) {
-            return BigDecimal.ZERO;
-        }
-
-        return totalCost.divide(totalQty, 4, RoundingMode.HALF_UP);
-    }
-
-    /**
-     * 获取库存总价值
+     * 获取截至日期的库存总价值
      */
     private BigDecimal getInventoryTotalValue(LocalDate date) {
-        // 查询所有仓库的库存价值
         List<Warehouse> warehouses = warehouseMapper.selectList(Wrappers.emptyWrapper());
         BigDecimal totalValue = BigDecimal.ZERO;
-
         for (Warehouse warehouse : warehouses) {
-            totalValue = totalValue.add(inventoryService.getWarehouseTotalValue(warehouse.getId()));
+            totalValue = totalValue.add(inventoryLedgerMapper.selectLatestByWarehouseAsOf(warehouse.getId(), date).stream()
+                    .map(ledger -> safe(ledger.getBalanceAmount()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
         }
-
         return totalValue.setScale(2, RoundingMode.HALF_UP);
     }
 }

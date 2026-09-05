@@ -4,11 +4,15 @@ import com.erp.common.Result;
 import com.erp.common.PageResult;
 import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.service.ReceivableService;
+import com.erp.module.finance.service.ReceiptService;
+import com.erp.module.system.service.SystemAuthorizationService;
 import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.system.TokenStore;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -20,6 +24,12 @@ import java.util.List;
 public class ReceivableController {
 
     private final ReceivableService receivableService;
+    private final ReceiptService receiptService;
+    private final SystemAuthorizationService authorizationService;
+
+    private TokenStore.LoginUser currentUser() {
+        return TokenStore.getCurrentLoginUser();
+    }
 
     /**
      * 分页查询应收账款
@@ -38,8 +48,10 @@ public class ReceivableController {
         request.setStatus(status);
         request.setStartDate(startDate != null ? java.time.LocalDate.parse(startDate) : null);
         request.setEndDate(endDate != null ? java.time.LocalDate.parse(endDate) : null);
+        request.setPage(page);
+        request.setSize(size);
 
-        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request);
+        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request, currentUser());
         return Result.success(result);
     }
 
@@ -48,7 +60,7 @@ public class ReceivableController {
      */
     @GetMapping("/{id}")
     public Result<ReceivableDtos.ReceivableListResponse> detail(@PathVariable Long id) {
-        ReceivableDtos.ReceivableListResponse detail = receivableService.getReceivableDetail(id);
+        ReceivableDtos.ReceivableListResponse detail = receivableService.getReceivableDetail(id, currentUser());
         return Result.success(detail);
     }
 
@@ -56,32 +68,61 @@ public class ReceivableController {
      * 创建应收账款
      */
     @PostMapping
-    public Result<Long> create(@RequestBody ReceivableDtos.ReceivableCreateRequest request) {
+    public Result<Long> create(@Valid @RequestBody ReceivableDtos.ReceivableCreateRequest request) {
         TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
         Long count = receivableService.createReceivable(request, currentUser);
         return Result.success(count);
     }
 
-    /**
-     * 收款核销
-     */
-    @PostMapping("/{id}/settle")
-    public Result<ReceivableDtos.SettleResponse> settle(@PathVariable Long id,
-                                                      @RequestBody ReceivableDtos.SettleRequest request) {
-        request.setReceivableId(id);
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        ReceivableDtos.SettleResponse response = receivableService.settleReceivable(request, currentUser);
-        return Result.success(response);
+    /** 客户收款多单核销 */
+    @PostMapping("/receipts")
+    public Result<ReceivableDtos.ReceiptResponse> createReceipt(@Valid @RequestBody ReceivableDtos.ReceiptCreateRequest request) {
+        authorizationService.requireFinanceAccess(currentUser());
+        return Result.success(receiptService.createAndAllocate(request, currentUser()));
     }
 
-    /**
-     * 批量核销
-     */
+    @PostMapping("/{id}/settle")
+    public Result<ReceivableDtos.ReceiptResponse> settle(@PathVariable Long id,
+                                                          @Valid @RequestBody ReceivableDtos.SettleRequest request) {
+        authorizationService.requireFinanceAccess(currentUser());
+        return Result.success(receiptService.createSingleAllocation(id, request.getAmount(),
+                request.getPaymentMethod(), request.getRemark(), currentUser()));
+    }
+
+    /** 批量核销统一走客户收款模型，避免写入供应商付款模型。 */
     @PostMapping("/batch-settle")
-    public Result<Void> batchSettle(@RequestBody ReceivableDtos.BatchSettleRequest request) {
-        TokenStore.LoginUser currentUser = TokenStore.getCurrentLoginUser();
-        receivableService.batchSettle(request, currentUser);
-        return Result.success();
+    public Result<ReceivableDtos.ReceiptResponse> batchSettle(@Valid @RequestBody ReceivableDtos.BatchSettleRequest request) {
+        authorizationService.requireFinanceAccess(currentUser());
+        if (request == null || request.getSettlements() == null || request.getSettlements().isEmpty()) {
+            throw new com.erp.common.BusinessException("批量核销明细不能为空");
+        }
+        var first = request.getSettlements().get(0);
+        if (request.getSettlements().size() == 1) {
+            return Result.success(receiptService.createSingleAllocation(first.getReceivableId(), first.getAmount(),
+                    first.getPaymentMethod(), first.getRemark(), currentUser()));
+        }
+        Receivable firstReceivable = receivableService.getReceivableEntity(first.getReceivableId());
+        if (firstReceivable == null) throw new com.erp.common.BusinessException("应收账款记录不存在");
+        for (var item : request.getSettlements()) {
+            Receivable receivable = receivableService.getReceivableEntity(item.getReceivableId());
+            if (receivable == null) throw new com.erp.common.BusinessException("应收账款记录不存在");
+            if (!firstReceivable.getCustomerId().equals(receivable.getCustomerId())) {
+                throw new com.erp.common.BusinessException("批量核销必须属于同一客户");
+            }
+        }
+        var receiptRequest = new ReceivableDtos.ReceiptCreateRequest();
+        receiptRequest.setCustomerId(firstReceivable.getCustomerId());
+        receiptRequest.setBizDate(LocalDate.now());
+        receiptRequest.setMethod(first.getPaymentMethod());
+        receiptRequest.setRemark(first.getRemark());
+        receiptRequest.setAmount(request.getSettlements().stream().map(ReceivableDtos.SettleRequest::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        receiptRequest.setAllocations(request.getSettlements().stream().map(item -> {
+            var allocation = new ReceivableDtos.ReceiptCreateRequest.AllocationItem();
+            allocation.setReceivableId(item.getReceivableId()); allocation.setAmount(item.getAmount());
+            return allocation;
+        }).toList());
+        return Result.success(receiptService.createAndAllocate(receiptRequest, currentUser()));
     }
 
     /**
@@ -89,7 +130,7 @@ public class ReceivableController {
      */
     @GetMapping("/statistics")
     public Result<List<ReceivableDtos.ReceivableStatisticsResponse>> getStatistics() {
-        List<ReceivableDtos.ReceivableStatisticsResponse> statistics = receivableService.getCustomerStatistics();
+        List<ReceivableDtos.ReceivableStatisticsResponse> statistics = receivableService.getCustomerStatistics(currentUser());
         return Result.success(statistics);
     }
 
@@ -98,7 +139,7 @@ public class ReceivableController {
      */
     @GetMapping("/customer/{customerId}/summary")
     public Result<ReceivableDtos.CustomerReceivableSummary> getCustomerSummary(@PathVariable Long customerId) {
-        ReceivableDtos.CustomerReceivableSummary summary = receivableService.getCustomerSummary(customerId);
+        ReceivableDtos.CustomerReceivableSummary summary = receivableService.getCustomerSummary(customerId, currentUser());
         return Result.success(summary);
     }
 
@@ -106,8 +147,10 @@ public class ReceivableController {
      * 获取账龄分析
      */
     @GetMapping("/aging-analysis")
-    public Result<List<ReceivableDtos.AgingAnalysisResponse>> getAgingAnalysis() {
-        List<ReceivableDtos.AgingAnalysisResponse> analysis = receivableService.getAgingAnalysis();
+    public Result<List<ReceivableDtos.AgingAnalysisResponse>> getAgingAnalysis(
+            @RequestParam(required = false) String cutoffDate) {
+        LocalDate cutoff = cutoffDate == null ? LocalDate.now() : LocalDate.parse(cutoffDate);
+        List<ReceivableDtos.AgingAnalysisResponse> analysis = receivableService.getAgingAnalysis(cutoff, currentUser());
         return Result.success(analysis);
     }
 
@@ -115,8 +158,10 @@ public class ReceivableController {
      * 获取逾期应收账款
      */
     @GetMapping("/overdue")
-    public Result<List<ReceivableDtos.ReceivableListResponse>> getOverdueReceivables() {
-        List<ReceivableDtos.ReceivableListResponse> overdue = receivableService.getOverdueReceivables();
+    public Result<List<ReceivableDtos.ReceivableListResponse>> getOverdueReceivables(
+            @RequestParam(required = false) String cutoffDate) {
+        LocalDate cutoff = cutoffDate == null ? LocalDate.now() : LocalDate.parse(cutoffDate);
+        List<ReceivableDtos.ReceivableListResponse> overdue = receivableService.getOverdueReceivables(cutoff, currentUser());
         return Result.success(overdue);
     }
 
@@ -132,7 +177,8 @@ public class ReceivableController {
         ReceivableDtos.StatementResponse statement = receivableService.generateStatement(
                 customerId,
                 java.time.LocalDate.parse(startDate),
-                java.time.LocalDate.parse(endDate));
+                java.time.LocalDate.parse(endDate),
+                currentUser());
         return Result.success(statement);
     }
 
@@ -143,7 +189,7 @@ public class ReceivableController {
     public Result<Integer> getUnsettledCount() {
         ReceivableDtos.ReceivableListRequest request = new ReceivableDtos.ReceivableListRequest();
         request.setStatus("UNSETTLED");
-        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request);
+        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request, currentUser());
         return Result.success((int) result.getTotal());
     }
 
@@ -154,7 +200,7 @@ public class ReceivableController {
     public Result<Integer> getSettledCount() {
         ReceivableDtos.ReceivableListRequest request = new ReceivableDtos.ReceivableListRequest();
         request.setStatus("SETTLED");
-        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request);
+        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request, currentUser());
         return Result.success((int) result.getTotal());
     }
 
@@ -163,7 +209,7 @@ public class ReceivableController {
      */
     @GetMapping("/stats/overdue-count")
     public Result<Integer> getOverdueCount() {
-        List<ReceivableDtos.ReceivableListResponse> overdue = receivableService.getOverdueReceivables();
+        List<ReceivableDtos.ReceivableListResponse> overdue = receivableService.getOverdueReceivables(LocalDate.now(), currentUser());
         return Result.success(overdue.size());
     }
 
@@ -173,9 +219,11 @@ public class ReceivableController {
     @GetMapping("/stats/total-amount")
     public Result<BigDecimal> getTotalAmount() {
         ReceivableDtos.ReceivableListRequest request = new ReceivableDtos.ReceivableListRequest();
-        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request);
+        request.setPage(1L); request.setSize(Long.MAX_VALUE);
+        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request, currentUser());
         BigDecimal totalAmount = result.getRecords().stream()
                 .map(ReceivableDtos.ReceivableListResponse::getAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return Result.success(totalAmount);
     }
@@ -186,9 +234,11 @@ public class ReceivableController {
     @GetMapping("/stats/total-paid")
     public Result<BigDecimal> getTotalPaid() {
         ReceivableDtos.ReceivableListRequest request = new ReceivableDtos.ReceivableListRequest();
-        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request);
+        request.setPage(1L); request.setSize(Long.MAX_VALUE);
+        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request, currentUser());
         BigDecimal totalPaid = result.getRecords().stream()
                 .map(ReceivableDtos.ReceivableListResponse::getPaidAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return Result.success(totalPaid);
     }
@@ -199,9 +249,11 @@ public class ReceivableController {
     @GetMapping("/stats/total-remaining")
     public Result<BigDecimal> getTotalRemaining() {
         ReceivableDtos.ReceivableListRequest request = new ReceivableDtos.ReceivableListRequest();
-        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request);
+        request.setPage(1L); request.setSize(Long.MAX_VALUE);
+        PageResult<ReceivableDtos.ReceivableListResponse> result = receivableService.getReceivables(request, currentUser());
         BigDecimal totalRemaining = result.getRecords().stream()
                 .map(ReceivableDtos.ReceivableListResponse::getRemainingAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return Result.success(totalRemaining);
     }

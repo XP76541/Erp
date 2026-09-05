@@ -50,6 +50,15 @@ export interface SalesOrderAuditRequest {
   forceConfirm?: boolean
 }
 
+export interface SalesOrderCreditStatus {
+  customerId: number
+  creditLimit: number
+  outstanding: number
+  available: number
+  exceeded: boolean
+  warning: string
+}
+
 export interface SalesOrderListResponse {
   id: number
   docNo: string
@@ -139,6 +148,12 @@ export interface SalesOutboundCreateFromOrderResponse {
 
 // API 请求方法
 export const salesApi = {
+  getCustomerCreditStatus: (customerId: number, orderAmount?: number) => {
+    return request.get<SalesOrderCreditStatus>(`/sales/customers/${customerId}/credit-status`, {
+      params: { orderAmount }
+    })
+  },
+
   // 销售订单
   getOrders: (params: {
     page?: number

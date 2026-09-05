@@ -9,6 +9,7 @@ import com.erp.module.system.TokenStore;
 import com.erp.module.system.entity.OperationLog;
 import com.erp.module.system.entity.SysPermission;
 import com.erp.module.system.entity.SysRole;
+import com.erp.module.system.service.BackupService;
 import com.erp.module.system.service.OperationLogService;
 import com.erp.module.system.service.SystemAuthorizationService;
 import com.erp.module.system.service.SystemManagementService;
@@ -17,6 +18,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,6 +35,7 @@ public class SystemManagementController {
     private final SystemAuthorizationService authorization;
     private final OperationLogMapper logMapper;
     private final OperationLogService logService;
+    private final BackupService backupService;
 
     public record UserRequest(@NotBlank String username, @NotBlank String realName, String password, Integer active, List<Long> roleIds) {}
     public record UserUpdateRequest(@NotBlank String realName, Integer active, List<Long> roleIds) {}
@@ -47,6 +53,13 @@ public class SystemManagementController {
     @GetMapping("/roles") public Result<List<SystemManagementService.RoleView>> roles(jakarta.servlet.http.HttpServletRequest r){admin(current(r));return Result.ok(service.roles());}
     @GetMapping("/permissions") public Result<List<SysPermission>> permissions(jakarta.servlet.http.HttpServletRequest r){admin(current(r));return Result.ok(service.permissions());}
     @PutMapping("/roles/{id}") public Result<Void> role(@PathVariable Long id,@Valid @RequestBody RoleRequest x,jakarta.servlet.http.HttpServletRequest r){var u=current(r);admin(u);service.updateRole(id,x.name(),x.remark(),x.permissionIds());logService.record(u,"system_role","UPDATE_PERMISSION","SYS_ROLE",id,null,"更新角色权限",r.getRemoteAddr());return Result.ok();}
+
+    @PostMapping("/backup")
+    public Result<BackupService.BackupInfo> backup(jakarta.servlet.http.HttpServletRequest r) { var u=current(r); admin(u); var result=backupService.create(); logService.record(u,"system_backup","CREATE","BACKUP",null,result.fileName(),"创建数据库备份",r.getRemoteAddr()); return Result.ok(result); }
+    @GetMapping("/backups")
+    public Result<List<BackupService.BackupInfo>> backups(jakarta.servlet.http.HttpServletRequest r) { admin(current(r)); return Result.ok(backupService.list()); }
+    @GetMapping("/backups/{fileName}")
+    public ResponseEntity<FileSystemResource> download(@PathVariable String fileName, jakarta.servlet.http.HttpServletRequest r) { admin(current(r)); var file=backupService.file(fileName); return ResponseEntity.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=\""+file.getFileName()+"\"").body(new FileSystemResource(file)); }
 
     @GetMapping("/operation-logs") public Result<PageResult<OperationLog>> logs(@RequestParam(defaultValue="1") long page,@RequestParam(defaultValue="20") long size,@RequestParam(required=false) String keyword,@RequestParam(required=false) String action,@RequestParam(required=false) String module,@RequestParam(required=false) String from,@RequestParam(required=false) String to,jakarta.servlet.http.HttpServletRequest r){admin(current(r));var q=Wrappers.<OperationLog>lambdaQuery().eq(action!=null&&!action.isBlank(),OperationLog::getAction,action).eq(module!=null&&!module.isBlank(),OperationLog::getModule,module).and(keyword!=null&&!keyword.isBlank(),w->w.like(OperationLog::getUserName,keyword).or().like(OperationLog::getDocNo,keyword));if(from!=null&&!from.isBlank())q.ge(OperationLog::getCreatedAt,LocalDate.parse(from).atStartOfDay());if(to!=null&&!to.isBlank())q.lt(OperationLog::getCreatedAt,LocalDate.parse(to).plusDays(1).atStartOfDay());q.orderByDesc(OperationLog::getCreatedAt);Page<OperationLog> p=logMapper.selectPage(new Page<>(page,size),q);return Result.ok(PageResult.of(p.getTotal(),p.getRecords()));}
 }

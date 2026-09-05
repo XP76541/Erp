@@ -1,7 +1,10 @@
 <template>
   <el-container class="layout">
     <el-aside width="220px" class="aside">
-      <div class="logo">贸易 ERP</div>
+      <div class="logo">
+        <span class="logo-mark">贸</span>
+        <span>贸易 ERP</span>
+      </div>
       <el-menu
         :default-active="route.path"
         router
@@ -9,42 +12,42 @@
         text-color="#c8c9cc"
         active-text-color="#ffffff"
       >
-        <el-menu-item index="/dashboard">
+        <el-menu-item v-if="canAccess('/dashboard')" index="/dashboard">
           <el-icon><Odometer /></el-icon>
           <span>仪表盘</span>
         </el-menu-item>
 
-        <el-sub-menu index="masterdata">
+        <el-sub-menu v-if="visibleChildren('masterdata').length" index="masterdata">
           <template #title>
             <el-icon><Goods /></el-icon>
             <span>基础数据</span>
           </template>
-          <el-menu-item index="/masterdata/products">商品档案</el-menu-item>
-          <el-menu-item index="/masterdata/categories">商品分类</el-menu-item>
-          <el-menu-item index="/masterdata/warehouses">仓库档案</el-menu-item>
-          <el-menu-item index="/masterdata/customers">客户档案</el-menu-item>
-          <el-menu-item index="/masterdata/suppliers">供应商档案</el-menu-item>
+          <el-menu-item v-if="canAccess('/masterdata/products')" index="/masterdata/products">商品档案</el-menu-item>
+          <el-menu-item v-if="canAccess('/masterdata/categories')" index="/masterdata/categories">商品分类</el-menu-item>
+          <el-menu-item v-if="canAccess('/masterdata/warehouses')" index="/masterdata/warehouses">仓库档案</el-menu-item>
+          <el-menu-item v-if="canAccess('/masterdata/customers')" index="/masterdata/customers">客户档案</el-menu-item>
+          <el-menu-item v-if="canAccess('/masterdata/suppliers')" index="/masterdata/suppliers">供应商档案</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="sales">
+        <el-sub-menu v-if="visibleChildren('sales').length" index="sales">
           <template #title>
             <el-icon><SoldOut /></el-icon>
             <span>销售管理</span>
           </template>
-          <el-menu-item index="/sales/orders">销售订单</el-menu-item>
-          <el-menu-item index="/sales/outbounds">销售出库单</el-menu-item>
+          <el-menu-item v-if="canAccess('/sales/orders')" index="/sales/orders">销售订单</el-menu-item>
+          <el-menu-item v-if="canAccess('/sales/outbounds')" index="/sales/outbounds">销售出库单</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="purchase">
+        <el-sub-menu v-if="visibleChildren('purchase').length" index="purchase">
           <template #title>
             <el-icon><ShoppingCart /></el-icon>
             <span>采购管理</span>
           </template>
-          <el-menu-item index="/purchase/inbounds">采购入库单</el-menu-item>
-          <el-menu-item index="/purchase/returns">采购退货单</el-menu-item>
+          <el-menu-item v-if="canAccess('/purchase/inbounds')" index="/purchase/inbounds">采购入库单</el-menu-item>
+          <el-menu-item v-if="canAccess('/purchase/returns')" index="/purchase/returns">采购退货单</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="finance">
+        <el-sub-menu v-if="visibleChildren('finance').length" index="finance">
           <template #title>
             <el-icon><Wallet /></el-icon>
             <span>财务管理</span>
@@ -56,25 +59,26 @@
           <el-menu-item index="/finance/reports">经营报表</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="inventory">
+        <el-sub-menu v-if="visibleChildren('inventory').length" index="inventory">
           <template #title>
             <el-icon><Box /></el-icon>
             <span>库存管理</span>
           </template>
-          <el-menu-item index="/inventory/stocks">即时库存</el-menu-item>
-          <el-menu-item index="/inventory/ledgers">出入库流水</el-menu-item>
-          <el-menu-item index="/inventory/transfers">库存调拨</el-menu-item>
-          <el-menu-item index="/inventory/checks">库存盘点</el-menu-item>
+          <el-menu-item v-if="canAccess('/inventory/stocks')" index="/inventory/stocks">即时库存</el-menu-item>
+          <el-menu-item v-if="canAccess('/inventory/ledgers')" index="/inventory/ledgers">出入库流水</el-menu-item>
+          <el-menu-item v-if="canAccess('/inventory/transfers')" index="/inventory/transfers">库存调拨</el-menu-item>
+          <el-menu-item v-if="canAccess('/inventory/checks')" index="/inventory/checks">库存盘点</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="system">
+        <el-sub-menu v-if="visibleChildren('system').length" index="system">
           <template #title>
             <el-icon><Setting /></el-icon>
             <span>系统管理</span>
           </template>
-          <el-menu-item index="/system/users">用户管理</el-menu-item>
-          <el-menu-item index="/system/roles">角色权限</el-menu-item>
-          <el-menu-item index="/system/logs">操作日志</el-menu-item>
+          <el-menu-item v-if="canAccess('/system/users')" index="/system/users">用户管理</el-menu-item>
+          <el-menu-item v-if="canAccess('/system/roles')" index="/system/roles">角色权限</el-menu-item>
+          <el-menu-item v-if="canAccess('/system/logs')" index="/system/logs">操作日志</el-menu-item>
+          <el-menu-item v-if="canAccess('/system/backups')" index="/system/backups">数据库备份</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>
@@ -117,13 +121,28 @@ import {
   Wallet,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { authApi } from '@/api/auth'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
+const canAccess = (path: string) => {
+  const routeRecord = router.getRoutes().find((record) => record.path === path)
+  const roles = routeRecord?.meta.roles as string[] | undefined
+  return !roles?.length || userStore.hasAnyRole(...roles)
+}
+
+const visibleChildren = (group: string) =>
+  router.getRoutes().filter((record) => record.path.startsWith(`/${group}/`) && canAccess(record.path))
+
 async function handleCommand(command: string) {
   if (command === 'logout') {
+    try {
+      await authApi.logout()
+    } catch {
+      // Local session must still be cleared if the server is unavailable.
+    }
     userStore.logout()
     await router.push('/login')
   }
@@ -133,48 +152,122 @@ async function handleCommand(command: string) {
 <style scoped>
 .layout {
   height: 100%;
+  background: var(--erp-page);
 }
 
 .aside {
-  background: #001529;
+  overflow: hidden;
+  background: #172a35;
+  box-shadow: 2px 0 12px rgba(20, 36, 45, 0.08);
 }
 
 .logo {
-  height: 60px;
-  line-height: 60px;
-  text-align: center;
-  color: #fff;
-  font-size: 18px;
+  display: flex;
+  height: 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 22px;
+  color: #f5fafb;
+  font-size: 17px;
   font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.logo-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 6px;
+  color: #173746;
+  background: #c8e0e5;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .aside :deep(.el-menu) {
+  padding: 10px 8px;
   border-right: none;
+  background: transparent;
+}
+
+.aside :deep(.el-menu-item),
+.aside :deep(.el-sub-menu__title) {
+  height: 42px;
+  margin: 2px 0;
+  border-radius: 6px;
+  color: #b7c5cb;
+}
+
+.aside :deep(.el-menu-item:hover),
+.aside :deep(.el-sub-menu__title:hover) {
+  color: #f4fbfc;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.aside :deep(.el-menu-item.is-active) {
+  color: #fff;
+  background: #2f6f8f;
+}
+
+.aside :deep(.el-sub-menu .el-menu-item) {
+  min-width: 0;
+  padding-left: 52px !important;
+  background: transparent;
 }
 
 .header {
   display: flex;
+  height: 64px;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  padding: 0 28px;
+  background: var(--erp-surface);
+  border-bottom: 1px solid var(--erp-border);
 }
 
 .header-title {
+  color: var(--erp-text);
   font-size: 16px;
-  color: #303133;
+  font-weight: 600;
 }
 
 .user {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: #5d6b76;
   cursor: pointer;
-  color: #606266;
+  transition: background 0.2s;
+}
+
+.user:hover {
+  background: #f2f5f6;
 }
 
 .main {
-  background: #f0f2f5;
+  overflow: auto;
+  padding: 24px 28px;
+  background: var(--erp-page);
+}
+
+@media (max-width: 800px) {
+  .aside { width: 190px !important; }
+  .main { padding: 18px; }
+  .header { padding: 0 18px; }
+}
+
+@media (max-width: 560px) {
+  .aside { width: 64px !important; }
+  .logo { justify-content: center; padding: 0; }
+  .logo > span:last-child,
+  .aside :deep(.el-menu-item span),
+  .aside :deep(.el-sub-menu__title span),
+  .aside :deep(.el-sub-menu__icon-arrow) { display: none; }
+  .aside :deep(.el-menu-item),
+  .aside :deep(.el-sub-menu__title) { justify-content: center; padding: 0 !important; }
 }
 </style>

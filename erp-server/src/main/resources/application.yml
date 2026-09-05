@@ -32,3 +32,10 @@ mybatis-plus:
 logging:
   level:
     com.erp: debug
+
+erp:
+  auth:
+    token-ttl: ${AUTH_TOKEN_TTL:PT8H}
+    token-cleanup-delay: ${AUTH_TOKEN_CLEANUP_DELAY:PT15M}
+  backup:
+    directory: ${ERP_BACKUP_DIRECTORY:./backups}

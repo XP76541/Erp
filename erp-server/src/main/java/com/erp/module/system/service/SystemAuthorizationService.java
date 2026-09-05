@@ -37,6 +37,62 @@ public class SystemAuthorizationService {
         if (!hasRole(user, "ADMIN")) throw new BusinessException(403, "无系统管理权限");
     }
 
+    /** 报表查询和导出权限；销售员只允许查看本人范围，财务/管理角色可查看完整报表。 */
+    public void requireReportAccess(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS")
+                && !hasRole(user, "FINANCE") && !hasRole(user, "SALES")) {
+            throw new BusinessException(403, "无报表查看权限");
+        }
+    }
+
+    /** 收付款及核销仅允许财务、管理员或老板操作。 */
+    public void requireFinanceAccess(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS") && !hasRole(user, "FINANCE")) {
+            throw new BusinessException(403, "无收付款及核销权限");
+        }
+    }
+
+    /** 库存查询允许仓库角色查看数量；成本字段仅限管理层及财务。返回是否可见成本。 */
+    public boolean requireInventoryQueryAccess(TokenStore.LoginUser user) {
+        Set<String> roles = roleCodes(user);
+        if (roles.contains("ADMIN") || roles.contains("BOSS") || roles.contains("FINANCE")) return true;
+        if (roles.contains("WAREHOUSE")) return false;
+        throw new BusinessException(403, "无库存查询权限");
+    }
+
+    /** 调拨、盘点及其库存变更仅允许仓库或管理角色操作。 */
+    public void requireInventoryWrite(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS") && !hasRole(user, "WAREHOUSE")) {
+            throw new BusinessException(403, "无调拨及盘点操作权限");
+        }
+    }
+
+    /** 库存单据查询允许仓库、财务及管理角色，财务仅保持只读。 */
+    public void requireInventoryRead(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS")
+                && !hasRole(user, "WAREHOUSE") && !hasRole(user, "FINANCE")) {
+            throw new BusinessException(403, "无库存单据查看权限");
+        }
+    }
+
+
+    /** 仅财务及管理角色可查看含成本/库存金额的报表。 */
+    public void requireCostReportAccess(TokenStore.LoginUser user) {
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "BOSS") && !hasRole(user, "FINANCE")) {
+            throw new BusinessException(403, "无成本及库存金额报表权限");
+        }
+    }
+
+    public boolean canViewCostReport(TokenStore.LoginUser user) {
+        return hasRole(user, "ADMIN") || hasRole(user, "BOSS") || hasRole(user, "FINANCE");
+    }
+
+    /** 销售员只能查看本人业务员维度；其他报表角色可按请求筛选。 */
+    public Long reportSalespersonScope(TokenStore.LoginUser user) {
+        requireReportAccess(user);
+        return salespersonScope(user);
+    }
+
     /**
      * 返回当前用户的角色编码。每次从数据库解析，避免登录快照中的角色过期。
      */
@@ -59,7 +115,12 @@ public class SystemAuthorizationService {
 
     /** SALES users are scoped to their own salesperson id; other approved roles are unrestricted. */
     public Long salespersonScope(TokenStore.LoginUser user) {
-        return hasRole(user, "SALES") ? user.userId() : null;
+        Set<String> roles = roleCodes(user);
+        if (roles.contains("ADMIN") || roles.contains("BOSS") || roles.contains("FINANCE")
+                || roles.contains("WAREHOUSE")) {
+            return null;
+        }
+        return roles.contains("SALES") ? user.userId() : null;
     }
 
     public void requireUnrestrictedOrSalesperson(TokenStore.LoginUser user, Long salespersonId) {

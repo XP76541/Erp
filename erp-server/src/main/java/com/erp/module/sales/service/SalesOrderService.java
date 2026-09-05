@@ -72,6 +72,24 @@ public class SalesOrderService {
         this.authorizationService = authorizationService;
     }
 
+    /** 查询客户信用额度状态；额度为0表示不限额。 */
+    public SalesOrderDtos.CreditStatus creditStatus(Long customerId, BigDecimal orderAmount, TokenStore.LoginUser user) {
+        Customer customer = customerMapper.selectById(customerId);
+        if (customer == null || customer.getIsActive() == 0) {
+            throw new BusinessException("客户不存在或已停用");
+        }
+        authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
+        BigDecimal limit = customer.getCreditLimit() == null ? BigDecimal.ZERO : customer.getCreditLimit();
+        BigDecimal outstanding = receivableMapper.sumOutstandingByCustomerId(customerId);
+        if (outstanding == null) outstanding = BigDecimal.ZERO;
+        BigDecimal requested = orderAmount == null ? BigDecimal.ZERO : orderAmount.max(BigDecimal.ZERO);
+        boolean unlimited = limit.compareTo(BigDecimal.ZERO) == 0;
+        BigDecimal available = unlimited ? BigDecimal.ZERO : limit.subtract(outstanding.add(requested)).max(BigDecimal.ZERO);
+        boolean exceeded = !unlimited && outstanding.add(requested).compareTo(limit) > 0;
+        String warning = exceeded ? "订单金额加未核销应收已超过客户信用额度" : (unlimited ? "客户未设置信用额度" : "信用额度充足");
+        return new SalesOrderDtos.CreditStatus(customerId, limit, outstanding, available, exceeded, warning);
+    }
+
     /** 分页列表:按单号/客户/状态过滤 */
     public PageResult<SalesOrderDtos.ListResponse> page(long page, long size, String keyword, String status, String customerId,
                                                         TokenStore.LoginUser user) {
@@ -172,6 +190,16 @@ public class SalesOrderService {
                 throw new BusinessException("商品低于最低限价，需老板确认");
             }
         }
+        SalesOrderDtos.CreditStatus credit = creditStatus(existing.getCustomerId(), totalAmount(items), user);
+        // 信用额度一期只预警不阻止审核，但审核时重新计算并记录结果，避免使用过期页面数据。
+        String lowPriceLines = items.stream()
+                .filter(item -> {
+                    Product product = productMapper.selectById(item.getProductId());
+                    BigDecimal minimum = product == null || product.getMinSalePrice() == null ? BigDecimal.ZERO : product.getMinSalePrice();
+                    return minimum.compareTo(BigDecimal.ZERO) > 0 && item.getPrice().compareTo(minimum) < 0;
+                })
+                .map(item -> String.valueOf(item.getLineNo()))
+                .collect(java.util.stream.Collectors.joining(","));
         // ② 抢占状态机:并发双击审核只有一次生效,失败者读到已审状态报错回滚
         if (orderMapper.claimAudit(id, user.userId()) == 0) {
             throw new BusinessException("单据不存在或不是草稿状态,无法审核");
@@ -179,7 +207,8 @@ public class SalesOrderService {
         SalesOrder doc = requireDoc(id);
         authorizationService.requireUnrestrictedOrSalesperson(user, doc.getSalespersonId());
 
-        String detail = "{\"amount\":" + totalAmount(items) + ",\"lines\":" + items.size() + "}";
+        String detail = "{\"amount\":" + totalAmount(items) + ",\"lines\":" + items.size() + ",\"forceConfirm\":" + forceConfirm
+                + ",\"lowPriceLines\":\"" + lowPriceLines + "\",\"creditExceeded\":" + credit.getExceeded() + "}";
         operationLogService.record(user, "sales_order", "AUDIT",
                 "SO", id, doc.getDocNo(), detail, ip);
     }
@@ -246,12 +275,22 @@ public class SalesOrderService {
 
     /** 查询待审核的销售订单数量 */
     public int countDraftOrders() {
-        return orderMapper.countDraftOrders();
+        return countDraftOrders(null);
+    }
+
+    public int countDraftOrders(TokenStore.LoginUser user) {
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        return scope == null ? orderMapper.countDraftOrders() : orderMapper.countDraftOrdersBySalesperson(scope);
     }
 
     /** 查询已审核未发货的销售订单数量 */
     public int countUnshippedOrders() {
-        return orderMapper.countUnshippedOrders();
+        return countUnshippedOrders(null);
+    }
+
+    public int countUnshippedOrders(TokenStore.LoginUser user) {
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        return scope == null ? orderMapper.countUnshippedOrders() : orderMapper.countUnshippedOrdersBySalesperson(scope);
     }
 
     private BigDecimal totalAmount(List<SalesOrderItem> items) {

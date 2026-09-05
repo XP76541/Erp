@@ -10,7 +10,7 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
     /**
      * 行锁读取结存(事务内使用):并发入库/出库串行化,防止加权平均成本算错
      */
-    @Select("SELECT * FROM inventory WITH (UPDLOCK, ROWLOCK) "
+    @Select("SELECT * FROM inventory WITH (UPDLOCK, HOLDLOCK, ROWLOCK) "
             + "WHERE product_id = #{productId} AND warehouse_id = #{warehouseId}")
     Inventory selectForUpdate(@Param("productId") Long productId, @Param("warehouseId") Long warehouseId);
 }

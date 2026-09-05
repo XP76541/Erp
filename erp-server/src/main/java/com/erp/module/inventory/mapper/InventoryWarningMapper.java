@@ -15,26 +15,31 @@ public interface InventoryWarningMapper extends BaseMapper<InventoryWarning> {
     /**
      * 根据预警类型和仓库ID查询激活的预警
      */
-    @Select("SELECT * FROM inventory_warning " +
-            "WHERE warning_type = #{warningType} AND warehouse_id = #{warehouseId} AND is_active = 1 " +
-            "ORDER BY created_at DESC")
+    @Select({"<script>",
+            "SELECT * FROM inventory_warning WHERE warning_type = #{warningType} AND is_active = 1 ",
+            "<if test='warehouseId != null'>AND warehouse_id = #{warehouseId}</if>",
+            "ORDER BY created_at DESC", "</script>"})
     List<InventoryWarning> selectActiveWarnings(@Param("warningType") String warningType,
                                                @Param("warehouseId") Long warehouseId);
 
     /**
      * 查询指定仓库的所有激活预警
      */
-    @Select("SELECT * FROM inventory_warning WHERE warehouse_id = #{warehouseId} AND is_active = 1 " +
-            "ORDER BY created_at DESC")
+    @Select({"<script>",
+            "SELECT * FROM inventory_warning WHERE is_active = 1 ",
+            "<if test='warehouseId != null'>AND warehouse_id = #{warehouseId}</if>",
+            "ORDER BY created_at DESC", "</script>"})
     List<InventoryWarning> selectAllActiveWarnings(@Param("warehouseId") Long warehouseId);
 
     /**
      * 根据商品ID和仓库ID查询激活的预警
      */
     @Select("SELECT * FROM inventory_warning " +
-            "WHERE product_id = #{productId} AND warehouse_id = #{warehouseId} AND is_active = 1 " +
+            "WHERE warning_type = #{warningType} AND product_id = #{productId} " +
+            "AND warehouse_id = #{warehouseId} AND is_active = 1 " +
             "ORDER BY created_at DESC")
-    List<InventoryWarning> selectActiveWarningsByProduct(@Param("productId") Long productId,
+    List<InventoryWarning> selectActiveWarningsByProduct(@Param("warningType") String warningType,
+                                                        @Param("productId") Long productId,
                                                         @Param("warehouseId") Long warehouseId);
 
     /**

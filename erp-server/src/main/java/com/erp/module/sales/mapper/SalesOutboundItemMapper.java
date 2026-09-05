@@ -20,6 +20,13 @@ public interface SalesOutboundItemMapper extends BaseMapper<SalesOutboundItem> {
     @Select("SELECT * FROM sales_outbound_item WHERE outbound_id = #{outboundId} ORDER BY line_no")
     List<SalesOutboundItem> selectByOutboundId(@Param("outboundId") Long outboundId);
 
+    /** 批量查询出库明细，避免报表逐单查询。 */
+    @Select({"<script>",
+            "SELECT * FROM sales_outbound_item WHERE outbound_id IN",
+            "<foreach collection='outboundIds' item='id' open='(' separator=',' close=')'>#{id}</foreach>",
+            "ORDER BY outbound_id, line_no", "</script>"})
+    List<SalesOutboundItem> selectByOutboundIds(@Param("outboundIds") List<Long> outboundIds);
+
     /**
      * 根据订单明细ID查询出库明细
      */

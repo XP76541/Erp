@@ -125,6 +125,17 @@
           </el-table-column>
         </el-table>
         <el-button plain size="small" :icon="Plus" class="add-line" @click="addItem">添加一行</el-button>
+        <el-alert
+          v-if="creditStatus"
+          :title="creditStatus.warning"
+          :type="creditStatus.exceeded ? 'warning' : 'info'"
+          :closable="false"
+          class="credit-alert"
+        >
+          <span>信用额度：¥{{ creditStatus.creditLimit.toFixed(2) }}</span>
+          <span>未核销应收：¥{{ creditStatus.outstanding.toFixed(2) }}</span>
+          <span>本单后可用：¥{{ creditStatus.available.toFixed(2) }}</span>
+        </el-alert>
 
         <el-form-item label="备注" prop="remark" class="remark">
           <el-input v-model="form.remark" maxlength="500" />
@@ -224,12 +235,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { salesApi } from '@/api/sales'
-import type { SalesOrder, SalesOrderListResponse, SalesOutboundCreateRequest } from '@/api/sales'
+import type { SalesOrder, SalesOrderListResponse, SalesOutboundCreateRequest, SalesOrderCreditStatus } from '@/api/sales'
 import { customerApi } from '@/api/customer'
 import type { Customer } from '@/api/customer'
 import { warehouseApi } from '@/api/warehouse'
@@ -254,6 +265,8 @@ const query = reactive({ page: 1, size: 10, keyword: '', status: '' })
 const dialogVisible = ref(false)
 const formRef = ref<FormInstance>()
 const form = reactive(defaultForm())
+const creditStatus = ref<SalesOrderCreditStatus | null>(null)
+let creditRequest = 0
 
 function defaultForm() {
   return {
@@ -365,9 +378,29 @@ function addItem() {
 
 function openCreate() {
   Object.assign(form, defaultForm())
+  creditStatus.value = null
   addItem()
   dialogVisible.value = true
 }
+
+const orderAmount = computed(() => form.items.reduce((sum, item) => sum + (item.qty || 0) * (item.price || 0), 0))
+
+async function refreshCreditStatus() {
+  const customerId = form.customerId
+  if (!customerId) {
+    creditStatus.value = null
+    return
+  }
+  const requestId = ++creditRequest
+  try {
+    const status = await salesApi.getCustomerCreditStatus(customerId, orderAmount.value)
+    if (requestId === creditRequest) creditStatus.value = status
+  } catch {
+    if (requestId === creditRequest) creditStatus.value = null
+  }
+}
+
+watch([() => form.customerId, orderAmount], refreshCreditStatus)
 
 async function handleSave() {
   const valid = await formRef.value?.validate().catch(() => false)
@@ -375,6 +408,11 @@ async function handleSave() {
   if (!form.items.length || form.items.some((i) => !i.productId)) {
     ElMessage.warning('请为每一行选择商品')
     return
+  }
+
+  await refreshCreditStatus()
+  if (creditStatus.value?.exceeded) {
+    ElMessage.warning(creditStatus.value.warning)
   }
 
   saving.value = true
@@ -527,6 +565,14 @@ onMounted(() => {
 
 .add-line {
   margin-top: 8px;
+}
+
+.credit-alert {
+  margin-top: 12px;
+}
+
+.credit-alert span {
+  margin-right: 20px;
 }
 
 .remark {

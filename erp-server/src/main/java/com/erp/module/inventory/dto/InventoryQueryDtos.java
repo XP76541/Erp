@@ -1,5 +1,6 @@
 package com.erp.module.inventory.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -9,6 +10,7 @@ import java.time.LocalDateTime;
 /** 即时库存与库存流水查询 DTO */
 public class InventoryQueryDtos {
     @Data
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class StockResponse {
         private Long productId;
         private String productCode;
@@ -23,6 +25,7 @@ public class InventoryQueryDtos {
     }
 
     @Data
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class LedgerResponse {
         private Long id;
         private String docType;

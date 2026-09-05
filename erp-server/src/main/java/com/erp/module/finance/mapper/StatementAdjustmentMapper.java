@@ -17,6 +17,18 @@ public interface StatementAdjustmentMapper extends BaseMapper<StatementAdjustmen
     /**
      * 获取指定日期范围内的调整记录
      */
+    @Select("SELECT * FROM statement_adjustment WHERE customer_id = #{customerId} " +
+            "AND adjustment_date BETWEEN #{startDate} AND #{endDate} ORDER BY adjustment_date DESC")
+    List<StatementAdjustment> getByCustomerAndDateRange(@Param("customerId") Long customerId,
+                                                        @Param("startDate") LocalDate startDate,
+                                                        @Param("endDate") LocalDate endDate);
+
+    @Select("SELECT * FROM statement_adjustment WHERE customer_id = #{customerId} " +
+            "AND adjustment_date BETWEEN #{startDate} AND #{endDate} ORDER BY adjustment_date DESC")
+    List<StatementAdjustment> getByDateRangeForCustomer(@Param("customerId") Long customerId,
+                                                        @Param("startDate") LocalDate startDate,
+                                                        @Param("endDate") LocalDate endDate);
+
     @Select("SELECT * FROM statement_adjustment WHERE adjustment_date BETWEEN #{startDate} AND #{endDate} ORDER BY adjustment_date DESC")
     List<StatementAdjustment> getByDateRange(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
@@ -44,6 +56,15 @@ public interface StatementAdjustmentMapper extends BaseMapper<StatementAdjustmen
             "GROUP BY adjustment_type")
     List<AdjustmentStatistics> getAdjustmentStatistics(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
+    @Select({"<script>",
+            "SELECT adjustment_type, COUNT(*) as count, SUM(adjustment_amount) as total_amount ",
+            "FROM statement_adjustment WHERE adjustment_date BETWEEN #{startDate} AND #{endDate} ",
+            "AND customer_id IN ",
+            "<foreach collection='customerIds' item='customerId' open='(' separator=',' close=')'>#{customerId}</foreach>",
+            "GROUP BY adjustment_type", "</script>"})
+    List<AdjustmentStatistics> getAdjustmentStatisticsByCustomers(@Param("startDate") LocalDate startDate,
+                                                                    @Param("endDate") LocalDate endDate,
+                                                                    @Param("customerIds") List<Long> customerIds);
     @Data
     static class AdjustmentStatistics {
         private String adjustmentType;

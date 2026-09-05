@@ -1,6 +1,13 @@
 package com.erp.module.finance.dto;
 
 import com.erp.module.finance.entity.Receivable;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.Valid;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,6 +28,8 @@ public class ReceivableDtos {
         private String status;
         private LocalDate startDate;
         private LocalDate endDate;
+        private Long page = 1L;
+        private Long size = 10L;
     }
 
     /**
@@ -151,12 +160,59 @@ public class ReceivableDtos {
         }
     }
 
+    /** 客户收款单及多单核销请求。 */
+    @Data
+    public static class ReceiptCreateRequest {
+        @NotNull(message = "客户不能为空")
+        private Long customerId;
+        private String idempotencyKey;
+        private LocalDate bizDate;
+        @NotNull(message = "收款金额不能为空")
+        @Digits(integer = 16, fraction = 2, message = "收款金额最多两位小数")
+        @DecimalMin(value = "0.01", message = "收款金额必须大于0")
+        private BigDecimal amount;
+        private String method;
+        private String bankAccount;
+        private String remark;
+        @Valid
+        private List<AllocationItem> allocations;
+
+        @Data
+        public static class AllocationItem {
+            @NotNull(message = "应收账款不能为空")
+            private Long receivableId;
+            @NotNull(message = "核销金额不能为空")
+            @Digits(integer = 16, fraction = 2, message = "核销金额最多两位小数")
+            @DecimalMin(value = "0.01", message = "核销金额必须大于0")
+            private BigDecimal amount;
+        }
+    }
+
+    @Data
+    public static class ReceiptResponse {
+        private Long id;
+        private String docNo;
+        private Long customerId;
+        private LocalDate bizDate;
+        private BigDecimal amount;
+        private BigDecimal allocatedAmount;
+        private String status;
+        private String method;
+        private String bankAccount;
+        private String remark;
+        private LocalDateTime createdAt;
+    }
+
     /**
      * 收款核销请求
      */
     @Data
     public static class SettleRequest {
+        @NotNull(message = "应收账款不能为空")
         private Long receivableId;
+        @NotNull(message = "核销金额不能为空")
+        @Digits(integer = 16, fraction = 2, message = "核销金额最多两位小数")
+        @DecimalMin(value = "0.01", message = "核销金额必须大于0")
         private BigDecimal amount;
         private String paymentMethod;
         private String remark;
@@ -167,6 +223,8 @@ public class ReceivableDtos {
      */
     @Data
     public static class BatchSettleRequest {
+        @NotEmpty(message = "批量核销明细不能为空")
+        @Valid
         private List<SettleRequest> settlements;
         private String batchNo;
     }
@@ -327,10 +385,18 @@ public class ReceivableDtos {
     @Data
     public static class StatementAdjustmentRequest {
         private Long statementId;
+        @NotNull
         private Long customerId;
+        @NotNull
         private LocalDate adjustmentDate;
+        @NotNull
+        @Digits(integer = 16, fraction = 2)
+        @DecimalMin(value = "-9999999999999999.99")
+        @DecimalMax(value = "9999999999999999.99")
         private BigDecimal adjustmentAmount;
+        @NotBlank
         private String adjustmentType;
+        @NotBlank
         private String reason;
         private String remark;
     }

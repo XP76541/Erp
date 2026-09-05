@@ -9,12 +9,15 @@ import com.erp.module.finance.entity.Receivable;
 import com.erp.module.finance.mapper.PaymentMapper;
 import com.erp.module.finance.mapper.PaymentAllocationMapper;
 import com.erp.module.finance.mapper.ReceivableMapper;
+import com.erp.module.finance.mapper.StatementAdjustmentMapper;
+import com.erp.module.finance.entity.StatementAdjustment;
 import com.erp.module.finance.dto.ReceivableDtos;
 import com.erp.module.masterdata.entity.Customer;
 import com.erp.module.masterdata.mapper.CustomerMapper;
 import com.erp.module.system.TokenStore;
 import com.erp.module.system.service.DocSequenceService;
 import com.erp.module.system.service.OperationLogService;
+import com.erp.module.system.service.SystemAuthorizationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,25 +40,36 @@ public class ReceivableService {
     private final CustomerMapper customerMapper;
     private final DocSequenceService docSequenceService;
     private final OperationLogService operationLogService;
+    private final SystemAuthorizationService authorizationService;
+    private final StatementAdjustmentMapper statementAdjustmentMapper;
 
     public ReceivableService(ReceivableMapper receivableMapper,
                             PaymentMapper paymentMapper,
                             PaymentAllocationMapper allocationMapper,
                             CustomerMapper customerMapper,
                             DocSequenceService docSequenceService,
-                            OperationLogService operationLogService) {
+                            OperationLogService operationLogService,
+                            SystemAuthorizationService authorizationService,
+                            StatementAdjustmentMapper statementAdjustmentMapper) {
         this.receivableMapper = receivableMapper;
         this.paymentMapper = paymentMapper;
         this.allocationMapper = allocationMapper;
         this.customerMapper = customerMapper;
         this.docSequenceService = docSequenceService;
         this.operationLogService = operationLogService;
+        this.authorizationService = authorizationService;
+        this.statementAdjustmentMapper = statementAdjustmentMapper;
     }
 
     /**
      * 获取应收账款列表
      */
     public PageResult<ReceivableDtos.ReceivableListResponse> getReceivables(ReceivableDtos.ReceivableListRequest params) {
+        return getReceivables(params, null);
+    }
+
+    public PageResult<ReceivableDtos.ReceivableListResponse> getReceivables(ReceivableDtos.ReceivableListRequest params,
+                                                                              TokenStore.LoginUser user) {
         var wrapper = Wrappers.<Receivable>lambdaQuery();
         if (params.getCustomerId() != null) {
             wrapper.eq(Receivable::getCustomerId, params.getCustomerId());
@@ -69,23 +83,43 @@ public class ReceivableService {
         if (params.getEndDate() != null) {
             wrapper.le(Receivable::getBusinessDate, params.getEndDate());
         }
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        if (scope != null) {
+            List<Long> customerIds = customerMapper.selectList(Wrappers.<Customer>lambdaQuery()
+                            .eq(Customer::getSalespersonId, scope))
+                    .stream().map(Customer::getId).toList();
+            if (customerIds.isEmpty()) return PageResult.of(0, List.of());
+            wrapper.in(Receivable::getCustomerId, customerIds);
+        }
         wrapper.orderByDesc(Receivable::getId);
 
-        List<Receivable> receivables = receivableMapper.selectList(wrapper);
+        Long page = params.getPage() == null ? 1L : Math.max(params.getPage(), 1L);
+        Long size = params.getSize() == null ? 10L : Math.max(params.getSize(), 1L);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Receivable> result =
+                receivableMapper.selectPage(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size), wrapper);
+        List<Receivable> receivables = result.getRecords();
         List<ReceivableDtos.ReceivableListResponse> responses = receivables.stream()
                 .map(this::convertToListResponse)
                 .collect(Collectors.toList());
 
-        return PageResult.of(receivables.size(), responses);
+        return PageResult.of(result.getTotal(), responses);
     }
 
     /**
      * 获取应收账款详情
      */
     public ReceivableDtos.ReceivableListResponse getReceivableDetail(Long id) {
+        return getReceivableDetail(id, null);
+    }
+
+    public ReceivableDtos.ReceivableListResponse getReceivableDetail(Long id, TokenStore.LoginUser user) {
         Receivable receivable = receivableMapper.selectById(id);
         if (receivable == null) {
             throw new BusinessException("应收账款记录不存在");
+        }
+        if (user != null) {
+            Customer customer = customerMapper.selectById(receivable.getCustomerId());
+            if (customer != null) authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
         }
         return convertToListResponse(receivable);
     }
@@ -101,10 +135,19 @@ public class ReceivableService {
             throw new BusinessException("客户不存在或已停用");
         }
 
+        authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
         LocalDate bizDate = request.getBusinessDate() != null ?
                 request.getBusinessDate() : LocalDate.now();
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new BusinessException("应收明细不能为空");
+        }
+        for (ReceivableDtos.ReceivableCreateRequest.Item item : request.getItems()) {
+            if (item.getAmount() == null || item.getAmount().signum() <= 0 || item.getAmount().scale() > 2) {
+                throw new BusinessException("应收金额必须大于0且最多两位小数");
+            }
+        }
 
-        // 创建应收账款记录
+        int createdCount = 0;
         for (ReceivableDtos.ReceivableCreateRequest.Item item : request.getItems()) {
             Receivable receivable = new Receivable();
             receivable.setDocNo(docSequenceService.nextDocNo("REC", "REC", bizDate.toString()));
@@ -122,9 +165,10 @@ public class ReceivableService {
             receivable.setUpdatedAt(LocalDateTime.now());
 
             receivableMapper.insert(receivable);
+            createdCount++;
         }
 
-        return 0L; // 返回创建的记录数量
+        return (long) createdCount; // 返回创建的记录数量
     }
 
     /**
@@ -133,16 +177,20 @@ public class ReceivableService {
     @Transactional
     public ReceivableDtos.SettleResponse settleReceivable(ReceivableDtos.SettleRequest request,
                                                         TokenStore.LoginUser user) {
-        Receivable receivable = receivableMapper.selectById(request.getReceivableId());
+        authorizationService.requireFinanceAccess(user);
+        Receivable receivable = receivableMapper.selectForUpdate(request.getReceivableId());
         if (receivable == null) {
             throw new BusinessException("应收账款记录不存在");
         }
+        Customer customer = customerMapper.selectById(receivable.getCustomerId());
+        if (customer != null) authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
 
         if (request.getAmount() == null || request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("核销金额必须大于0");
         }
 
-        if (request.getAmount().compareTo(receivable.getRemainingAmount()) > 0) {
+        if (request.getAmount().compareTo(request.getAmount() == null ? BigDecimal.ZERO :
+                (receivable.getRemainingAmount() == null ? BigDecimal.ZERO : receivable.getRemainingAmount())) > 0) {
             throw new BusinessException("核销金额不能超过剩余金额");
         }
 
@@ -197,16 +245,24 @@ public class ReceivableService {
      */
     @Transactional
     public void batchSettle(ReceivableDtos.BatchSettleRequest request, TokenStore.LoginUser user) {
+        authorizationService.requireFinanceAccess(user);
+        if (request == null || request.getSettlements() == null || request.getSettlements().isEmpty()) {
+            throw new BusinessException("批量核销明细不能为空");
+        }
         for (ReceivableDtos.SettleRequest settleRequest : request.getSettlements()) {
             settleReceivable(settleRequest, user);
         }
     }
 
-    /**
-     * 获取客户应收账款统计
-     */
+    /** 获取客户应收账款统计 */
     public List<ReceivableDtos.ReceivableStatisticsResponse> getCustomerStatistics() {
-        List<ReceivableMapper.ReceivableStatistics> statistics = receivableMapper.getCustomerReceivableStatistics();
+        return getCustomerStatistics(null);
+    }
+
+    public List<ReceivableDtos.ReceivableStatisticsResponse> getCustomerStatistics(TokenStore.LoginUser user) {
+        List<Long> customerIds = scopedCustomerIds(user);
+        if (customerIds != null && customerIds.isEmpty()) return List.of();
+        List<ReceivableMapper.ReceivableStatistics> statistics = receivableMapper.getCustomerReceivableStatisticsScoped(customerIds);
         return statistics.stream()
                 .map(stat -> {
                     Customer customer = customerMapper.selectById(stat.getCustomerId());
@@ -223,27 +279,35 @@ public class ReceivableService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 获取账龄分析
-     */
+    /** 获取指定截止日期的账龄分析。 */
     public List<ReceivableDtos.AgingAnalysisResponse> getAgingAnalysis() {
-        List<ReceivableMapper.AgingAnalysis> analysis = receivableMapper.getAgingAnalysis();
-        return analysis.stream()
-                .map(analysisData -> new ReceivableDtos.AgingAnalysisResponse(
-                        analysisData.getAgingBucket(),
-                        analysisData.getTotalAmount(),
-                        analysisData.getTotalPaid(),
-                        analysisData.getTotalRemaining()))
+        return getAgingAnalysis(LocalDate.now(), null);
+    }
+
+    public List<ReceivableDtos.AgingAnalysisResponse> getAgingAnalysis(LocalDate cutoffDate,
+                                                                        TokenStore.LoginUser user) {
+        LocalDate cutoff = cutoffDate == null ? LocalDate.now() : cutoffDate;
+        List<Long> customerIds = scopedCustomerIds(user);
+        if (customerIds != null && customerIds.isEmpty()) return List.of();
+        return receivableMapper.getAgingAnalysis(cutoff, customerIds).stream()
+                .map(data -> new ReceivableDtos.AgingAnalysisResponse(
+                        data.getAgingBucket(), data.getTotalAmount(),
+                        data.getTotalPaid(), data.getTotalRemaining()))
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 获取逾期应收账款
-     */
+    /** 获取指定截止日期的逾期应收账款。 */
     public List<ReceivableDtos.ReceivableListResponse> getOverdueReceivables() {
-        List<Receivable> overdueReceivables = receivableMapper.getOverdueReceivables();
-        return overdueReceivables.stream()
-                .map(this::convertToListResponse)
+        return getOverdueReceivables(LocalDate.now(), null);
+    }
+
+    public List<ReceivableDtos.ReceivableListResponse> getOverdueReceivables(LocalDate cutoffDate,
+                                                                               TokenStore.LoginUser user) {
+        LocalDate cutoff = cutoffDate == null ? LocalDate.now() : cutoffDate;
+        List<Long> customerIds = scopedCustomerIds(user);
+        if (customerIds != null && customerIds.isEmpty()) return List.of();
+        return receivableMapper.getOverdueReceivables(cutoff, customerIds).stream()
+                .map(receivable -> convertToListResponse(receivable, cutoff))
                 .collect(Collectors.toList());
     }
 
@@ -251,29 +315,39 @@ public class ReceivableService {
      * 获取客户应收账款汇总
      */
     public ReceivableDtos.CustomerReceivableSummary getCustomerSummary(Long customerId) {
+        return getCustomerSummary(customerId, null);
+    }
+
+    public ReceivableDtos.CustomerReceivableSummary getCustomerSummary(Long customerId, TokenStore.LoginUser user) {
         // 获取客户基本信息
         Customer customer = customerMapper.selectById(customerId);
         if (customer == null) {
             throw new BusinessException("客户不存在");
         }
+        if (user != null) authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
 
-        // 查询该客户的所有应收账款
-        List<Receivable> receivables = receivableMapper.selectList(
-                Wrappers.<Receivable>lambdaQuery()
-                        .eq(Receivable::getCustomerId, customerId));
+        LocalDate asOfDate = LocalDate.now();
+        List<Receivable> receivables = receivablesForCustomer(customerId);
+
+        java.util.function.Function<Receivable, Integer> overdueDays = r ->
+                r.getDueDate() != null && r.getDueDate().isBefore(asOfDate)
+                        ? (int) ChronoUnit.DAYS.between(r.getDueDate(), asOfDate) : 0;
 
         // 计算汇总数据
         BigDecimal totalReceivable = receivables.stream()
                 .map(Receivable::getAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalPaid = receivables.stream()
                 .map(Receivable::getPaidAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalOverdue = receivables.stream()
-                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 0)
+                .filter(r -> overdueDays.apply(r) > 0)
                 .map(Receivable::getRemainingAmount)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Integer countUnsettled = (int) receivables.stream()
@@ -281,50 +355,55 @@ public class ReceivableService {
                 .count();
 
         Integer countOverdue = (int) receivables.stream()
-                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 0)
+                .filter(r -> overdueDays.apply(r) > 0)
                 .count();
 
         // 账龄分布
         List<ReceivableDtos.CustomerReceivableSummary.AgingDistribution> agingDistribution = List.of(
                 new ReceivableDtos.CustomerReceivableSummary.AgingDistribution("未到期",
                         receivables.stream()
-                                .filter(r -> r.getDaysOverdue() == null || r.getDaysOverdue() <= 0)
+                .filter(r -> overdueDays.apply(r) <= 0)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
-                                .filter(r -> r.getDaysOverdue() == null || r.getDaysOverdue() <= 0)
+                .filter(r -> overdueDays.apply(r) <= 0)
                                 .count()),
                 new ReceivableDtos.CustomerReceivableSummary.AgingDistribution("1-30天",
                         receivables.stream()
-                                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 0 && r.getDaysOverdue() <= 30)
+                                .filter(r -> overdueDays.apply(r) > 0 && overdueDays.apply(r) <= 30)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
-                                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 0 && r.getDaysOverdue() <= 30)
+                                .filter(r -> overdueDays.apply(r) > 0 && overdueDays.apply(r) <= 30)
                                 .count()),
                 new ReceivableDtos.CustomerReceivableSummary.AgingDistribution("31-60天",
                         receivables.stream()
-                                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 30 && r.getDaysOverdue() <= 60)
+                                .filter(r -> overdueDays.apply(r) > 30 && overdueDays.apply(r) <= 60)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
-                                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 30 && r.getDaysOverdue() <= 60)
+                                .filter(r -> overdueDays.apply(r) > 30 && overdueDays.apply(r) <= 60)
                                 .count()),
                 new ReceivableDtos.CustomerReceivableSummary.AgingDistribution("61-90天",
                         receivables.stream()
-                                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 60 && r.getDaysOverdue() <= 90)
+                                .filter(r -> overdueDays.apply(r) > 60 && overdueDays.apply(r) <= 90)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
-                                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 60 && r.getDaysOverdue() <= 90)
+                                .filter(r -> overdueDays.apply(r) > 60 && overdueDays.apply(r) <= 90)
                                 .count()),
                 new ReceivableDtos.CustomerReceivableSummary.AgingDistribution("90天以上",
                         receivables.stream()
-                                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 90)
+                                .filter(r -> overdueDays.apply(r) > 90)
                                 .map(Receivable::getRemainingAmount)
+                                .map(value -> value == null ? BigDecimal.ZERO : value)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add),
                         (int) receivables.stream()
-                                .filter(r -> r.getDaysOverdue() != null && r.getDaysOverdue() > 90)
+                                .filter(r -> overdueDays.apply(r) > 90)
                                 .count())
         );
 
@@ -345,36 +424,44 @@ public class ReceivableService {
     public ReceivableDtos.StatementResponse generateStatement(Long customerId,
                                                              LocalDate startDate,
                                                              LocalDate endDate) {
-        // 获取客户信息
+        return generateStatement(customerId, startDate, endDate, null);
+    }
+
+    public ReceivableDtos.StatementResponse generateStatement(Long customerId,
+                                                             LocalDate startDate,
+                                                             LocalDate endDate,
+                                                             TokenStore.LoginUser user) {
+        if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
+            throw new BusinessException("对账单日期范围无效");
+        }
         Customer customer = customerMapper.selectById(customerId);
         if (customer == null) {
             throw new BusinessException("客户不存在");
         }
+        authorizationService.requireUnrestrictedOrSalesperson(user, customer.getSalespersonId());
 
-        // 查询指定日期范围内的应收账款
-        List<Receivable> receivables = receivableMapper.getByDateRange(startDate, endDate);
-
-        // 计算期初余额（取上一天的数据）
-        LocalDate prevDate = startDate.minusDays(1);
-        List<Receivable> prevReceivables = receivableMapper.getByDateRange(prevDate, prevDate);
-        BigDecimal openingBalance = prevReceivables.stream()
+        List<Receivable> receivables = receivableMapper.getByCustomerAndDateRange(customerId, startDate, endDate);
+        List<Receivable> previous = receivableMapper.getByCustomerBeforeDate(customerId, startDate);
+        BigDecimal openingBalance = previous.stream()
                 .map(Receivable::getRemainingAmount)
+                .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // 计算本期数据
         BigDecimal currentReceivables = receivables.stream()
                 .map(Receivable::getAmount)
+                .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-
         BigDecimal payments = receivables.stream()
                 .map(Receivable::getPaidAmount)
+                .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal adjustments = statementAdjustmentMapper.getByCustomerAndDateRange(customerId, startDate, endDate)
+                .stream()
+                .map(StatementAdjustment::getAdjustmentAmount)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal closingBalance = openingBalance.add(currentReceivables)
+                .subtract(payments).subtract(adjustments);
 
-        BigDecimal adjustments = BigDecimal.ZERO; // TODO: 添加调整金额的逻辑
-
-        BigDecimal closingBalance = openingBalance.add(currentReceivables).subtract(payments).subtract(adjustments);
-
-        // 构建对账单明细
         List<ReceivableDtos.StatementResponse.StatementDetail> details = receivables.stream()
                 .map(receivable -> {
                     ReceivableDtos.StatementResponse.StatementDetail detail = new ReceivableDtos.StatementResponse.StatementDetail();
@@ -386,23 +473,34 @@ public class ReceivableService {
                     detail.setRemaining(receivable.getRemainingAmount());
                     detail.setStatus(receivable.getStatus());
                     return detail;
-                })
-                .collect(Collectors.toList());
+                }).collect(Collectors.toList());
 
-        return new ReceivableDtos.StatementResponse(
-                customerId,
-                customer.getName(),
-                endDate,
-                openingBalance,
-                currentReceivables,
-                payments,
-                adjustments,
-                closingBalance,
-                details);
+        return new ReceivableDtos.StatementResponse(customerId, customer.getName(), endDate,
+                openingBalance, currentReceivables, payments, adjustments, closingBalance, details);
     }
 
-    // 私有辅助方法
+    public Receivable getReceivableEntity(Long id) {
+        return receivableMapper.selectById(id);
+    }
+
+    private List<Long> scopedCustomerIds(TokenStore.LoginUser user) {
+        Long scope = user == null ? null : authorizationService.salespersonScope(user);
+        if (scope == null) return null;
+        return customerMapper.selectList(Wrappers.<Customer>lambdaQuery()
+                        .eq(Customer::getSalespersonId, scope))
+                .stream().map(Customer::getId).toList();
+    }
+
+    private List<Receivable> receivablesForCustomer(Long customerId) {
+        return receivableMapper.selectList(Wrappers.<Receivable>lambdaQuery()
+                .eq(Receivable::getCustomerId, customerId));
+    }
+
     private ReceivableDtos.ReceivableListResponse convertToListResponse(Receivable receivable) {
+        return convertToListResponse(receivable, LocalDate.now());
+    }
+
+    private ReceivableDtos.ReceivableListResponse convertToListResponse(Receivable receivable, LocalDate asOfDate) {
         ReceivableDtos.ReceivableListResponse response = new ReceivableDtos.ReceivableListResponse();
         response.setId(receivable.getId());
         response.setDocNo(receivable.getDocNo());
@@ -415,9 +513,12 @@ public class ReceivableService {
         response.setPaidAmount(receivable.getPaidAmount());
         response.setRemainingAmount(receivable.getRemainingAmount());
         response.setStatus(receivable.getStatus());
-        response.setDaysOverdue(receivable.getDaysOverdue());
-        response.setAgingBucket(receivable.getAgingBucket());
-        response.setCreatedAt(receivable.getCreatedAt().toString());
+        int daysOverdue = receivable.getDueDate() != null && receivable.getDueDate().isBefore(asOfDate)
+                ? (int) ChronoUnit.DAYS.between(receivable.getDueDate(), asOfDate) : 0;
+        response.setDaysOverdue(daysOverdue);
+        response.setAgingBucket(daysOverdue <= 0 ? "未到期" : daysOverdue <= 30 ? "1-30天"
+                : daysOverdue <= 60 ? "31-60天" : daysOverdue <= 90 ? "61-90天" : "90天以上");
+        response.setCreatedAt(receivable.getCreatedAt() == null ? null : receivable.getCreatedAt().toString());
         return response;
     }
 }

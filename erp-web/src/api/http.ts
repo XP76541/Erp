@@ -31,6 +31,10 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
   (response) => {
+    // 文件下载使用 Blob，不尝试按统一 JSON 响应解包。
+    if (response.config.responseType === 'blob' || response.data instanceof Blob) {
+      return response.data as never
+    }
     const body = response.data as ApiBody<unknown>
     if (body && typeof body === 'object' && 'code' in body) {
       if (body.code !== 0) {
@@ -44,9 +48,18 @@ http.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      if (router.currentRoute.value.path !== '/login') {
-        router.push('/login')
+      const authorization = error.config?.headers?.Authorization
+      const failedToken = typeof authorization === 'string' && authorization.startsWith('Bearer ')
+        ? authorization.slice('Bearer '.length)
+        : undefined
+      const currentToken = localStorage.getItem('token')
+      if (!failedToken || failedToken === currentToken) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('realName')
+        localStorage.removeItem('roleCodes')
+        if (router.currentRoute.value.path !== '/login') {
+          router.push('/login')
+        }
       }
       ElMessage.error('未登录或登录已过期')
     } else {
