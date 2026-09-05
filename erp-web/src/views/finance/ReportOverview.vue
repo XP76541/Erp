@@ -17,7 +17,7 @@
           <el-table v-loading="loading" :data="inventory?.products || []" border stripe><el-table-column prop="productName" label="商品" min-width="180" /><el-table-column prop="productSpec" label="规格" min-width="130" /><el-table-column prop="warehouseName" label="仓库" min-width="130" /><el-table-column prop="quantity" label="数量" width="110" /><el-table-column prop="unitCost" label="单位成本" width="130"><template #default="{ row }">¥{{ money(row.unitCost) }}</template></el-table-column><el-table-column prop="totalValue" label="库存金额" width="140"><template #default="{ row }">¥{{ money(row.totalValue) }}</template></el-table-column></el-table>
         </el-tab-pane>
         <el-tab-pane label="财务汇总" name="finance">
-          <el-row :gutter="16" class="stats"><el-col v-for="item in financeCards" :key="item.label" :span="8"><el-statistic :title="item.label" :value="item.value" :precision="typeof item.value === 'string' ? undefined : 2" prefix="¥" /></el-col></el-row>
+          <el-row :gutter="16" class="stats"><el-col v-for="item in financeCards" :key="item.label" :span="8"><el-statistic :title="item.label" :value="item.value" :precision="2" prefix="¥" /></el-col></el-row>
           <el-descriptions v-if="finance" :column="2" border><el-descriptions-item label="报表日期">{{ finance.reportDate }}</el-descriptions-item><el-descriptions-item label="净利润">¥{{ money(finance.netProfit) }}</el-descriptions-item><el-descriptions-item label="应收账款">¥{{ money(finance.totalReceivables) }}</el-descriptions-item><el-descriptions-item label="应付账款">¥{{ money(finance.totalPayables) }}</el-descriptions-item></el-descriptions>
         </el-tab-pane>
       </el-tabs>
@@ -42,15 +42,11 @@ const salesRows = ref<SalesDailyReportResponse[]>([])
 const inventory = ref<InventorySummaryResponse>()
 const finance = ref<FinanceSummaryResponse>()
 const salesTotals = computed(() => salesRows.value.reduce((a, r) => ({ orders: a.orders + (r.totalOrders || 0), amount: a.amount + (r.totalAmount || 0), shipped: a.shipped + (r.shippedAmount || 0) }), { orders: 0, amount: 0, shipped: 0 }))
-const financeCards = computed(() => [{ label: '销售额', value: finance.value?.totalSales || 0 }, { label: '采购额', value: finance.value?.totalPurchases || 0 }, { label: '库存总值', value: finance.value?.totalInventory || 0 }, { label: '净利润', value: finance.value?.netProfit == null ? '不可用' : finance.value.netProfit }])
+const financeCards = computed(() => [{ label: '销售额', value: finance.value?.totalSales || 0 }, { label: '采购额', value: finance.value?.totalPurchases || 0 }, { label: '库存总值', value: finance.value?.totalInventory || 0 }, { label: '净利润', value: finance.value?.netProfit || 0 }])
 const rangeParams = () => ({ startDate: dateRange.value?.[0], endDate: dateRange.value?.[1] })
-const money = (value?: number | null) => value == null ? '不可用' : Number(value).toFixed(2)
+const money = (value?: number) => Number(value || 0).toFixed(2)
 
 async function loadActive() {
-  if (dateRange.value && dateRange.value[0] > dateRange.value[1]) {
-    ElMessage.warning('开始日期不能晚于结束日期')
-    return
-  }
   loading.value = true
   try {
     if (activeTab.value === 'sales') salesRows.value = await salesDailyReportApi.get(rangeParams())
@@ -62,7 +58,7 @@ async function downloadActive() {
   exporting.value = true
   try {
     const response = activeTab.value === 'sales' ? await salesDailyReportApi.export(rangeParams()) : activeTab.value === 'inventory' ? await inventorySummaryApi.export({ date: inventoryDate.value }) : await financeSummaryApi.export(rangeParams())
-    const url = URL.createObjectURL(response)
+    const url = URL.createObjectURL(response.data)
     const link = document.createElement('a'); link.href = url; link.download = `${activeTab.value}-report.xlsx`; link.click(); link.remove(); URL.revokeObjectURL(url)
     ElMessage.success('报表导出成功')
   } finally { exporting.value = false }

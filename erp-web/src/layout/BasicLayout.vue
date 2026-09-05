@@ -52,11 +52,11 @@
             <el-icon><Wallet /></el-icon>
             <span>财务管理</span>
           </template>
-          <el-menu-item v-if="canAccess('/finance/payables')" index="/finance/payables">应付账款</el-menu-item>
-          <el-menu-item v-if="canAccess('/finance/payments')" index="/finance/payments">供应商付款</el-menu-item>
-          <el-menu-item v-if="canAccess('/finance/receivables')" index="/finance/receivables">应收核销</el-menu-item>
-          <el-menu-item v-if="canAccess('/finance/aging-report')" index="/finance/aging-report">应收账龄</el-menu-item>
-          <el-menu-item v-if="canAccess('/finance/reports')" index="/finance/reports">经营报表</el-menu-item>
+          <el-menu-item index="/finance/payables">应付账款</el-menu-item>
+          <el-menu-item index="/finance/payments">供应商付款</el-menu-item>
+          <el-menu-item index="/finance/receivables">应收核销</el-menu-item>
+          <el-menu-item index="/finance/aging-report">应收账龄</el-menu-item>
+          <el-menu-item index="/finance/reports">经营报表</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu v-if="visibleChildren('inventory').length" index="inventory">
