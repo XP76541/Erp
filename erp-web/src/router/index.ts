@@ -176,24 +176,26 @@ const router = createRouter({
 router.beforeEach(async (to: RouteLocationNormalized) => {
   document.title = to.meta.title ? `${to.meta.title as string} - 贸易ERP` : '贸易ERP'
 
+  const userStore = useUserStore()
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) {
     return '/login'
   }
-  if (to.path === '/login' && token) {
+
+  if (token && !userStore.rolesLoaded) {
+    try {
+      await userStore.loadCurrentUser()
+    } catch {
+      if (to.path !== '/login') return '/login'
+    }
+  }
+
+  if (to.path === '/login' && localStorage.getItem('token')) {
     return '/'
   }
 
   const requiredRoles = to.meta.roles as string[] | undefined
   if (requiredRoles?.length) {
-    const userStore = useUserStore()
-    if (!userStore.rolesLoaded) {
-      try {
-        await userStore.loadCurrentUser()
-      } catch {
-        return '/login'
-      }
-    }
     if (!userStore.hasAnyRole(...requiredRoles)) return '/dashboard'
   }
 })

@@ -48,9 +48,18 @@ http.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      if (router.currentRoute.value.path !== '/login') {
-        router.push('/login')
+      const authorization = error.config?.headers?.Authorization
+      const failedToken = typeof authorization === 'string' && authorization.startsWith('Bearer ')
+        ? authorization.slice('Bearer '.length)
+        : undefined
+      const currentToken = localStorage.getItem('token')
+      if (!failedToken || failedToken === currentToken) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('realName')
+        localStorage.removeItem('roleCodes')
+        if (router.currentRoute.value.path !== '/login') {
+          router.push('/login')
+        }
       }
       ElMessage.error('未登录或登录已过期')
     } else {

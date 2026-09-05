@@ -17,7 +17,7 @@ export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') ?? '')
   const realName = ref(localStorage.getItem('realName') ?? '')
   const roleCodes = ref(readRoles())
-  const hydrationComplete = ref(roleCodes.value.length > 0)
+  const hydrationComplete = ref(!token.value)
   let hydrationPromise: Promise<void> | null = null
 
   const rolesLoaded = computed(() => hydrationComplete.value)
@@ -47,6 +47,10 @@ export const useUserStore = defineStore('user', () => {
     if (!hydrationPromise) {
       hydrationPromise = authApi.me()
         .then((data) => setSession(data, true))
+        .catch((error) => {
+          logout()
+          throw error
+        })
         .finally(() => { hydrationPromise = null })
     }
     await hydrationPromise
